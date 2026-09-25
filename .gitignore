@@ -16,7 +16,7 @@ env/
 ENV/
 
 # Environment variables / secrets
-.env
+.env.development
 .env.*
 !.env.example
 
@@ -46,6 +46,7 @@ htmlcov/
 
 # Claude Code personal settings
 .claude/settings.local.json
+CLAUDE.local.md
 
 # OS
 .DS_Store
@@ -53,3 +54,7 @@ Thumbs.db
 
 # Logs
 *.log
+
+# Local storage
+storage/*
+!storage/.gitkeep
