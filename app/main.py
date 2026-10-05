@@ -9,11 +9,13 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from langchain_openai import ChatOpenAI
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from starlette.concurrency import run_in_threadpool
 
+from app.ai.graph import ApprovalPipeline
 from app.ai.guardrails import get_pii_guard
 from app.api.routers.chat import router as chat_router
 from app.config import settings
@@ -75,10 +77,17 @@ async def lifespan(app: FastAPI):
         # Loads spaCy/Presidio once at startup instead of on the first request.
         await run_in_threadpool(get_pii_guard)
 
+        Path(settings.graph_checkpoint_path).parent.mkdir(parents=True, exist_ok=True)
+        checkpointer = await stack.enter_async_context(
+            AsyncSqliteSaver.from_conn_string(settings.graph_checkpoint_path)
+        )
+        approval_pipeline = ApprovalPipeline(engine, checkpointer)
+
         app.state.db_engine = engine
         app.state.redis = redis
         app.state.vector_repository = vector_repository
         app.state.llm = llm
+        app.state.approval_pipeline = approval_pipeline
 
         yield
 

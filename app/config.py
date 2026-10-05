@@ -89,7 +89,9 @@ class Settings(BaseSettings):
     mcp_server_url: str = "http://localhost:9000/mcp"
     mcp_api_key: SecretStr = SecretStr("local-dev-only-change-me")
 
-    graph_checkpoint_path: str = "./data/graph_checkpoints.sqlite"
+    # Own subdirectory so a docker volume mounted here doesn't shadow the
+    # read-only static seed docs that also live under data/.
+    graph_checkpoint_path: str = "./data/graph/graph_checkpoints.sqlite"
 
     @property
     def database_url(self) -> str:

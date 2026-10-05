@@ -12,7 +12,9 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 from starlette.concurrency import run_in_threadpool
 
+from app.ai.admin_agent import draft_notification
 from app.ai.chat_memory import SummaryBufferMemory
+from app.ai.graph import ApprovalPipeline
 from app.ai.guardrails import get_pii_guard, is_prompt_injection
 from app.ai.prompts import BUILD_PROMPT
 from app.ai.tools import ToolContext, create_parking_tools
@@ -33,6 +35,7 @@ class ParkingChat:
         redis: Redis,
         vector_repository: AbstractVectorRepository,
         llm: ChatOpenAI,
+        approval_pipeline: ApprovalPipeline,
         summary_llm: ChatOpenAI | None = None,
     ):
         self.llm = llm
@@ -42,6 +45,7 @@ class ParkingChat:
         self.repository = ParkingRepository(session)
         self.reservations = ReservationRepository(session)
         self.store = ChatStore(redis)
+        self.approval_pipeline = approval_pipeline
         self.timezone = ZoneInfo(settings.timezone)
 
     @staticmethod
@@ -85,9 +89,36 @@ class ParkingChat:
         state["last_reservation_id"] = str(reservation_id)
         await memory.clear()  # start fresh after a submitted booking
 
+        # Stage 2/4: hand the reservation off to the admin-approval graph.
+        await self.start_approval(reservation_id, booking)
+
         return self.response(
             f"Your reservation request was saved and is awaiting administrator approval.\nReference: {reservation_id}"
         )
+
+    async def start_approval(self, reservation_id: UUID, booking: BookingInput) -> None:
+        info = await self.repository.get_public_info(
+            parking_id=booking.parking_id,
+            on_date=booking.starts_at.astimezone(self.timezone).date(),
+        )
+        period = (
+            f"{booking.starts_at.astimezone(self.timezone).isoformat()} - "
+            f"{booking.ends_at.astimezone(self.timezone).isoformat()}"
+        )
+
+        message = await draft_notification(
+            self.llm,
+            {
+                "Reservation ID": str(reservation_id),
+                "Parking": info["name"] if info else str(booking.parking_id),
+                "Space type": booking.space_type,
+                "Customer": f"{booking.first_name} {booking.surname}",
+                "Car number": booking.car_number,
+                "Period": period,
+            },
+        )
+
+        await self.approval_pipeline.start(reservation_id, message)
 
     async def ask(self, session_id: str, question: str) -> dict:
         question = question.strip()

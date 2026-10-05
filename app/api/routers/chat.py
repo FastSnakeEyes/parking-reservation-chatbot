@@ -1,14 +1,14 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
 
-from app.helpers import set_chat_cookie
+from app.ai.graph import run_chat_turn
 from app.dependencies import (
     ChatServiceDependency,
     CookieDependency,
     cookie_rate_limit,
     global_user_limit,
 )
+from app.helpers import set_chat_cookie
 from app.schemas.chat import ChatRequest, ChatResponse
-
 
 router = APIRouter(tags=["chat"])
 
@@ -38,7 +38,8 @@ async def chat(
         )
 
     try:
-        result = await chatbot.ask(
+        result = await run_chat_turn(
+            chatbot,
             session_id=session_id,
             question=question,
         )
