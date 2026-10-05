@@ -19,7 +19,7 @@ TokenCounter = Callable[[Sequence[BaseMessage]], int]
 
 @lru_cache
 def get_token_counter() -> TokenCounter:
-    if settings.token_counter == "tiktoken":
+    if settings.token_counter == "tiktoken":  # noqa: S105 (not a secret)
         counter_model = ChatOpenAI(
             model=settings.llm_model,
             api_key=settings.openai_api_key.get_secret_value(),

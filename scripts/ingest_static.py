@@ -1,14 +1,13 @@
 import argparse
 from pathlib import Path
 
+from app.config import BASE_DIR
+from app.dependencies import create_vector_repository
 from langchain_core.documents import Document
 from langchain_text_splitters import (
     MarkdownHeaderTextSplitter,
     RecursiveCharacterTextSplitter,
 )
-
-from app.config import BASE_DIR
-from app.dependencies import create_vector_repository
 
 
 class MarkdownLoader:

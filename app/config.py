@@ -1,5 +1,5 @@
 import os
-from enum import Enum
+from enum import StrEnum
 from pathlib import Path
 from typing import Literal
 
@@ -8,7 +8,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
 
 
-class AppEnvironment(str, Enum):
+class AppEnvironment(StrEnum):
     DEVELOPMENT = "development"
     TESTING = "testing"
     PRODUCTION = "production"
@@ -77,7 +77,7 @@ class Settings(BaseSettings):
     history_keep_tokens: int = Field(default=1500, gt=0)
     history_max_stored: int = Field(default=40, gt=0)
     max_tool_rounds: int = Field(default=8, gt=0)
-    token_counter: Literal["tiktoken", "approximate"] = "tiktoken"
+    token_counter: Literal["tiktoken", "approximate"] = "tiktoken"  # noqa: S105 (not a secret)
 
     public_contacts: list[str] = Field(default_factory=list)
     use_injection_model: bool = False

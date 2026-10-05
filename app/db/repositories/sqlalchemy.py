@@ -1,5 +1,6 @@
 import builtins
-from typing import Any, Mapping
+from collections.abc import Mapping
+from typing import Any
 
 import sqlalchemy as sa
 from sqlalchemy.ext.asyncio import AsyncSession

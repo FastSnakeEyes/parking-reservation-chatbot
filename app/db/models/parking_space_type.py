@@ -10,8 +10,8 @@ from app.db.models.base import Base
 if TYPE_CHECKING:
     from app.db.models.capacity_override import CapacityOverride
     from app.db.models.parking import Parking
-    from app.db.models.reservation import Reservation
     from app.db.models.price import Price
+    from app.db.models.reservation import Reservation
 
 
 class ParkingSpaceType(Base):

@@ -1,5 +1,6 @@
 import time
-from typing import Annotated, AsyncIterator
+from collections.abc import AsyncIterator
+from typing import Annotated
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request

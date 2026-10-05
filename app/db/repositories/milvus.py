@@ -76,7 +76,7 @@ class MilvusRepository(AbstractVectorRepository):
 
             rows = []
 
-            for document, vector in zip(batch, vectors):
+            for document, vector in zip(batch, vectors, strict=True):
                 identity = document.metadata.get("id")
 
                 if identity is None:

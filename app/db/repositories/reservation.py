@@ -1,15 +1,15 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from uuid import UUID
+from zoneinfo import ZoneInfo
 
 import sqlalchemy as sa
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.ext.asyncio import AsyncSession
-from zoneinfo import ZoneInfo
 
 from app.config import settings
 from app.db.models import ParkingSpaceType, Reservation
-from app.schemas.chat import BookingInput
 from app.db.repositories.postgres import PostgresRepository
+from app.schemas.chat import BookingInput
 
 
 class ReservationRepository(PostgresRepository[Reservation]):
@@ -18,7 +18,7 @@ class ReservationRepository(PostgresRepository[Reservation]):
         self.timezone = ZoneInfo(settings.timezone)
 
     async def validate_request(self, booking: BookingInput) -> None:
-        if booking.starts_at <= datetime.now(timezone.utc):
+        if booking.starts_at <= datetime.now(UTC):
             raise ValueError("Reservation start must be in the future")
 
         capacity = await self.session.scalar(

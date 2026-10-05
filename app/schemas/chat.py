@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from typing import Literal
 
 from pydantic import (
@@ -51,7 +51,7 @@ class BookingInput(BaseModel):
         if value.tzinfo is None or value.utcoffset() is None:
             raise ValueError("A timezone offset is required")
 
-        return value.astimezone(timezone.utc)
+        return value.astimezone(UTC)
 
     @model_validator(mode="after")
     def validate_period(self):

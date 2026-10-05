@@ -12,7 +12,6 @@ from langchain_core.runnables import RunnablePassthrough
 from app.ai.token_counting import count_tokens
 from app.config import settings
 
-
 SYSTEM_PROMPT = """
 You are a parking information and reservation assistant.
 

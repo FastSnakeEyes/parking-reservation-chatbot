@@ -1,13 +1,10 @@
 import asyncio
-from datetime import date, datetime, timezone
+from datetime import UTC, date, datetime
 from decimal import Decimal
 from uuid import NAMESPACE_URL, uuid5
 from zoneinfo import ZoneInfo
 
 import sqlalchemy as sa
-from sqlalchemy.dialects.postgresql import insert
-from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
-
 from app.config import settings
 from app.db.models import (
     CapacityOverride,
@@ -18,6 +15,8 @@ from app.db.models import (
     WorkingHours,
 )
 from app.db.repositories.postgres import PostgresRepository
+from sqlalchemy.dialects.postgresql import insert
+from sqlalchemy.ext.asyncio import AsyncSession, create_async_engine
 
 
 def build_parkings() -> list[dict]:
@@ -526,7 +525,7 @@ def build_capacity_overrides(
         6,
         0,
         tzinfo=vilnius,
-    ).astimezone(timezone.utc)
+    ).astimezone(UTC)
 
     ends_at = datetime(
         2026,
@@ -535,7 +534,7 @@ def build_capacity_overrides(
         14,
         0,
         tzinfo=vilnius,
-    ).astimezone(timezone.utc)
+    ).astimezone(UTC)
 
     # Sample maintenance restriction: only one level remains usable.
     capacities = {

@@ -3,10 +3,10 @@ from langchain_core.messages import BaseMessage, SystemMessage, get_buffer_strin
 from langchain_core.output_parsers import StrOutputParser
 from redis.asyncio import Redis
 
+from app.ai.chat_history import RedisChatHistory
 from app.ai.prompts import SUMMARY_PROMPT
 from app.ai.token_counting import count_tokens
 from app.config import settings
-from app.ai.chat_history import RedisChatHistory
 
 
 def _text(value: str | bytes | None) -> str:

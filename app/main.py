@@ -144,7 +144,7 @@ async def root(request: Request):
 @app.get("/health")
 async def health(
     db: SQLSessionDependency,
-    redis: Redis = Depends(get_redis),
+    redis: Redis = Depends(get_redis),  # noqa: B008 (standard FastAPI dependency pattern)
 ):
     try:
         await db.execute(text("SELECT 1"))

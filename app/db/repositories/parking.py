@@ -1,4 +1,4 @@
-from datetime import date, datetime, time, timedelta, timezone
+from datetime import UTC, date, datetime, time, timedelta
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -153,13 +153,13 @@ class ParkingRepository(PostgresRepository[Parking]):
             on_date,
             time.min,
             tzinfo=self.timezone,
-        ).astimezone(timezone.utc)
+        ).astimezone(UTC)
 
         day_end = datetime.combine(
             on_date + timedelta(days=1),
             time.min,
             tzinfo=self.timezone,
-        ).astimezone(timezone.utc)
+        ).astimezone(UTC)
 
         statement = (
             sa.select(
