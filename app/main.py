@@ -17,6 +17,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.ai.graph import ApprovalPipeline
 from app.ai.guardrails import get_pii_guard
+from app.api.routers.admin import router as admin_router
 from app.api.routers.chat import router as chat_router
 from app.config import settings
 from app.dependencies import (
@@ -109,6 +110,9 @@ templates = Jinja2Templates(
 
 # Defines POST /chat using ParkingChat and SQL/vector tools.
 app.include_router(chat_router)
+
+# Defines the admin console API (Stage 2); ui/admin_app.py is its client.
+app.include_router(admin_router)
 
 
 async def get_redis(request: Request) -> Redis:

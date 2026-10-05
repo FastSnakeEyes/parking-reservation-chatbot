@@ -20,4 +20,7 @@ format: install
 test: install
 	uv run pytest -s
 
-.PHONY: install_uv init_venv install check format test
+admin-ui: install
+	uv run streamlit run ui/admin_app.py
+
+.PHONY: install_uv init_venv install check format test admin-ui

@@ -174,3 +174,17 @@ class ApprovalPipeline:
             Command(resume={"decision": decision, "note": note}),
             config=self._config(reservation_id),
         )
+
+    async def pending_message(self, reservation_id: UUID) -> str | None:
+        """The drafted notification for a reservation paused at admin_approval.
+
+        Reads it back from the already-captured interrupt rather than
+        drafting it again on every admin console poll.
+        """
+        snapshot = await self.graph.aget_state(self._config(reservation_id))
+
+        for task in snapshot.tasks:
+            for pending in task.interrupts:
+                return pending.value["message"]
+
+        return None
