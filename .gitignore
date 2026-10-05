@@ -58,3 +58,6 @@ Thumbs.db
 # Local storage
 storage/*
 !storage/.gitkeep
+
+# Stage 3 MCP server output (copied out of the mcp-server container for inspection)
+approved_reservations.txt
