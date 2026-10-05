@@ -15,7 +15,11 @@ from presidio_anonymizer import AnonymizerEngine
 from app.config import settings
 
 DEFAULT_PII_ENTITIES = [
-    "PERSON",
+    # No PERSON: en_core_web_sm's NER is unreliable on this domain's many
+    # Lithuanian place names (observed: "Vilnius", "Email", "Snipiskes" all
+    # misclassified as PERSON), and there's no real PERSON-leak risk to
+    # catch here - the vector store holds only public static docs, and
+    # reservation PII never flows through the redacted answer/query paths.
     "EMAIL_ADDRESS",
     "PHONE_NUMBER",
     "CREDIT_CARD",
@@ -47,11 +51,20 @@ class PIIGuard:
         if not text:
             return []
 
-        return self._analyzer.analyze(
+        results = self._analyzer.analyze(
             text=text,
             language="en",
             entities=entities or DEFAULT_PII_ENTITIES,
         )
+
+        # The operator's own published phone/email (e.g. the support line)
+        # is meant to be shared, not redacted.
+        public_contacts = {contact.strip() for contact in settings.public_contacts}
+
+        if not public_contacts:
+            return results
+
+        return [result for result in results if text[result.start : result.end].strip() not in public_contacts]
 
     def contains_pii(
         self,

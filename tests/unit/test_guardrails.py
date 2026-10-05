@@ -1,10 +1,28 @@
 from app.ai.guardrails import get_pii_guard, is_prompt_injection
+from app.config import settings
 
 
-def test_contains_pii_detects_email_and_name():
+def test_contains_pii_detects_email():
     guard = get_pii_guard()
 
-    assert guard.contains_pii("My name is John Smith, email john@example.com")
+    assert guard.contains_pii("Contact me at john@example.com")
+
+
+def test_contains_pii_false_for_lithuanian_place_names():
+    # Regression: en_core_web_sm misclassifies "Vilnius"/"Snipiskes" as
+    # PERSON; PERSON is deliberately excluded from DEFAULT_PII_ENTITIES.
+    guard = get_pii_guard()
+
+    assert not guard.contains_pii("local Vilnius time, parking in Snipiskes")
+
+
+def test_redact_does_not_touch_an_allow_listed_public_contact(monkeypatch):
+    monkeypatch.setattr(settings, "public_contacts", ["+370 5 200 0000"])
+    guard = get_pii_guard()
+
+    text = "Customer support phone: +370 5 200 0000"
+
+    assert guard.redact(text) == text
 
 
 def test_contains_pii_false_for_public_topic_query():
