@@ -1,0 +1,35 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v3
+        with:
+          version: "0.12.18"
+
+      - name: Set up Python
+        run: uv python install 3.13.5
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Lint
+        run: uv run ruff check .
+
+      - name: Check formatting
+        run: uv run ruff format --check .
+
+      # tests/conftest.py starts its own ephemeral Postgres via
+      # testcontainers (Docker is preinstalled on GitHub-hosted runners);
+      # Redis is faked in-process. No external services needed here.
+      - name: Run tests
+        run: uv run pytest

@@ -51,7 +51,6 @@ dev = [
 eval = [
     "locust>=2.46.6",
     "pandas>=3.0.6",
-    "ragas>=0.4.3",
 ]
 
 [tool.ruff]

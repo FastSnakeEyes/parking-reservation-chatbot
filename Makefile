@@ -1,4 +1,4 @@
-SRC_DIRS = src
+SRC_DIRS = app
 TEST_SRC_DIRS = tests
 
 init_venv: install_uv
@@ -23,4 +23,10 @@ test: install
 admin-ui: install
 	uv run streamlit run ui/admin_app.py
 
-.PHONY: install_uv init_venv install check format test admin-ui
+eval: install
+	uv run --group eval python -m evals.rag_eval
+
+load-test: install
+	uv run --group eval locust -f load_tests/locustfile.py --host http://localhost:8000
+
+.PHONY: install_uv init_venv install check format test admin-ui eval load-test

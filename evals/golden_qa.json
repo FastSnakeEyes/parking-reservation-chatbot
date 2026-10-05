@@ -1,0 +1,62 @@
+[
+  {
+    "question": "What payment methods are accepted at VilniusPark car parks?",
+    "relevant_sources": ["general_info.md"]
+  },
+  {
+    "question": "Can I park a motorcycle at a VilniusPark car park?",
+    "relevant_sources": ["general_info.md"]
+  },
+  {
+    "question": "Do disability parking card holders get free parking?",
+    "relevant_sources": ["general_info.md"]
+  },
+  {
+    "question": "What are the steps to reserve a parking space?",
+    "relevant_sources": ["booking_process.md"]
+  },
+  {
+    "question": "What is the minimum and maximum length of a reservation?",
+    "relevant_sources": ["booking_process.md"]
+  },
+  {
+    "question": "Can I cancel my parking reservation for free?",
+    "relevant_sources": ["booking_process.md"]
+  },
+  {
+    "question": "Why might a parking reservation be rejected?",
+    "relevant_sources": ["booking_process.md"]
+  },
+  {
+    "question": "What is the maximum driving speed inside the car parks?",
+    "relevant_sources": ["rules.md"]
+  },
+  {
+    "question": "What happens if I lose my entry ticket?",
+    "relevant_sources": ["rules.md"]
+  },
+  {
+    "question": "Are LPG vehicles allowed in the Old Town car park?",
+    "relevant_sources": ["rules.md", "parkings/old_town.md"]
+  },
+  {
+    "question": "What is the height limit at the Old Town car park?",
+    "relevant_sources": ["parkings/old_town.md"]
+  },
+  {
+    "question": "How many EV charging bays does the Old Town car park have?",
+    "relevant_sources": ["parkings/old_town.md"]
+  },
+  {
+    "question": "What facilities does the Business Center car park have?",
+    "relevant_sources": ["parkings/business_center.md"]
+  },
+  {
+    "question": "Where is the Užupis car park located and how big is it?",
+    "relevant_sources": ["parkings/uzupis.md"]
+  },
+  {
+    "question": "Is there a shuttle between the Airport car park and the terminal?",
+    "relevant_sources": ["parkings/airport.md"]
+  }
+]
