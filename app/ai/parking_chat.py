@@ -120,6 +120,26 @@ class ParkingChat:
 
         await self.approval_pipeline.start(reservation_id, message)
 
+    async def pending_decision_notice(self, state: dict) -> str | None:
+        """A one-time proactive notice when the administrator has decided on
+        the customer's last reservation since they were last in this
+        session - otherwise the customer never finds out the outcome."""
+        reservation_id = state.get("last_reservation_id")
+
+        if not reservation_id:
+            return None
+
+        reservation = await self.reservations.get_by_id(UUID(reservation_id))
+
+        if reservation is None or reservation.status not in ("recorded", "rejected"):
+            return None
+
+        state["last_reservation_id"] = None  # deliver this notice only once
+
+        outcome = "approved and recorded" if reservation.status == "recorded" else "rejected by the administrator"
+
+        return f"Update: your reservation {reservation_id} was {outcome}.\nYou can ask your question again."
+
     async def ask(self, session_id: str, question: str) -> dict:
         question = question.strip()
 
@@ -142,6 +162,13 @@ class ParkingChat:
             return self.response("I can't process that request. Please ask about parking information or reservations.")
 
         state = await self.store.load(session_id)
+
+        notice = await self.pending_decision_notice(state)
+
+        if notice is not None:
+            await self.store.save(session_id, state)
+            return self.response(notice)
+
         memory = self.memory(session_id)
         command = question.casefold()
 

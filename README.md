@@ -29,6 +29,9 @@ Engineering: Fast Track" course assignment described in [`docs/SPECIFICATION.md`
 4. On approval, `record_or_close` calls the MCP server's `record_reservation` tool (writes
    `Name | Car Number | Reservation Period | Approval Time` to a file) and sets the
    reservation's status to `recorded`; on rejection it's set to `rejected`.
+5. The customer finds out the next time they send any message in that session:
+   `ParkingChat.pending_decision_notice` checks their last reservation's status and leads
+   with an approved/rejected notice before anything else.
 
 ## Prerequisites
 
