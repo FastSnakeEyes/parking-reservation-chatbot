@@ -1,6 +1,7 @@
 from contextlib import AsyncExitStack, asynccontextmanager
 from datetime import date, datetime
 from pathlib import Path
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 from fastapi import Depends, FastAPI, HTTPException, Request
@@ -13,6 +14,7 @@ from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from starlette.concurrency import run_in_threadpool
 
+from app.ai.guardrails import get_pii_guard
 from app.api.routers.chat import router as chat_router
 from app.config import settings
 from app.dependencies import (
@@ -20,7 +22,6 @@ from app.dependencies import (
     SQLSessionDependency,
     create_vector_repository,
 )
-from uuid import UUID, uuid4
 from app.helpers import set_chat_cookie
 
 APP_DIR = Path(__file__).resolve().parent
@@ -70,6 +71,9 @@ async def lifespan(app: FastAPI):
             timeout=30,
             max_retries=1,
         )
+
+        # Loads spaCy/Presidio once at startup instead of on the first request.
+        await run_in_threadpool(get_pii_guard)
 
         app.state.db_engine = engine
         app.state.redis = redis
@@ -183,9 +187,7 @@ async def parking_info(
     repository: ParkingRepositoryDependency,
     on_date: date | None = None,
 ):
-    requested_date = on_date or datetime.now(
-        ZoneInfo(settings.timezone)
-    ).date()
+    requested_date = on_date or datetime.now(ZoneInfo(settings.timezone)).date()
 
     info = await repository.get_public_info(
         parking_id=parking_id,

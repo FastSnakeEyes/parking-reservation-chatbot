@@ -123,11 +123,7 @@ async def global_user_limit(
 
     # 1. Remove users whose last activity is older than active_user_ttl
     entries = await redis_conn.hgetall(key)
-    stale_users = [
-        uid
-        for uid, last_seen in entries.items()
-        if now - int(last_seen) > settings.active_user_ttl
-    ]
+    stale_users = [uid for uid, last_seen in entries.items() if now - int(last_seen) > settings.active_user_ttl]
     if stale_users:
         await redis_conn.hdel(key, *stale_users)
 

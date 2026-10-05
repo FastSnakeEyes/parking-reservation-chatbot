@@ -10,7 +10,10 @@ from langchain_openai import ChatOpenAI
 from pydantic import ValidationError
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
+from starlette.concurrency import run_in_threadpool
 
+from app.ai.chat_memory import SummaryBufferMemory
+from app.ai.guardrails import get_pii_guard, is_prompt_injection
 from app.ai.prompts import BUILD_PROMPT
 from app.ai.tools import ToolContext, create_parking_tools
 from app.config import settings
@@ -18,7 +21,6 @@ from app.db.repositories.base import AbstractVectorRepository
 from app.db.repositories.parking import ParkingRepository
 from app.db.repositories.reservation import ReservationRepository
 from app.schemas.chat import BookingInput
-from app.ai.chat_memory import SummaryBufferMemory
 from app.services.chat_store import ChatStore
 
 REQUEST_TIMEOUT_SECONDS = 120
@@ -63,10 +65,7 @@ class ParkingChat:
             previous_id = state.get("last_reservation_id")
 
             if previous_id:
-                return self.response(
-                    "Your previous request was already submitted.\n"
-                    f"Reference: {previous_id}"
-                )
+                return self.response(f"Your previous request was already submitted.\nReference: {previous_id}")
 
             return self.response("There is no reviewed reservation to confirm.")
 
@@ -80,19 +79,14 @@ class ParkingChat:
         except ValueError as exc:
             state["draft"] = None
 
-            return self.response(
-                f"The request cannot be submitted: {exc}. "
-                "Please provide corrected details."
-            )
+            return self.response(f"The request cannot be submitted: {exc}. Please provide corrected details.")
 
         state["draft"] = None
         state["last_reservation_id"] = str(reservation_id)
         await memory.clear()  # start fresh after a submitted booking
 
         return self.response(
-            "Your reservation request was saved and is awaiting "
-            "administrator approval.\n"
-            f"Reference: {reservation_id}"
+            f"Your reservation request was saved and is awaiting administrator approval.\nReference: {reservation_id}"
         )
 
     async def ask(self, session_id: str, question: str) -> dict:
@@ -113,6 +107,9 @@ class ParkingChat:
             await lock.release()
 
     async def _ask(self, session_id: str, question: str) -> dict:
+        if await run_in_threadpool(is_prompt_injection, question):
+            return self.response("I can't process that request. Please ask about parking information or reservations.")
+
         state = await self.store.load(session_id)
         memory = self.memory(session_id)
         command = question.casefold()
@@ -121,9 +118,7 @@ class ParkingChat:
             await self.store.clear(session_id)
             await memory.clear()
 
-            return self.response(
-                "The conversation and unsent booking draft were cleared."
-            )
+            return self.response("The conversation and unsent booking draft were cleared.")
 
         # The model cannot authorize a database write.
         if command == "confirm":
@@ -150,12 +145,14 @@ class ParkingChat:
             parallel_tool_calls=False,
         )
 
-        prompt = await BUILD_PROMPT.ainvoke({
-            **await memory.load(),  # running summary + recent turns
-            "question": question,
-            "now": datetime.now(self.timezone).strftime("%Y-%m-%d %H:%M"),
-            "timezone": settings.timezone,
-        })
+        prompt = await BUILD_PROMPT.ainvoke(
+            {
+                **await memory.load(),  # running summary + recent turns
+                "question": question,
+                "now": datetime.now(self.timezone).strftime("%Y-%m-%d %H:%M"),
+                "timezone": settings.timezone,
+            }
+        )
         messages = prompt.to_messages()
 
         for _ in range(settings.max_tool_rounds):
@@ -164,12 +161,19 @@ class ParkingChat:
 
             if not answer.tool_calls:
                 text = self.extract_text(answer.content)
+                # Defense in depth: redact any PII surfaced by retrieval or the
+                # model itself. The booking review (context.review) is handled
+                # separately below since it legitimately echoes the user's own
+                # just-supplied name/car number back to them.
+                text = await run_in_threadpool(get_pii_guard().redact, text)
 
                 # Store only question + final answer; tool chatter stays in this turn.
-                await memory.add_turn([
-                    HumanMessage(content=question),
-                    AIMessage(content=text),
-                ])
+                await memory.add_turn(
+                    [
+                        HumanMessage(content=question),
+                        AIMessage(content=text),
+                    ]
+                )
 
                 return self.response(text, context.sources)
 
@@ -185,12 +189,7 @@ class ParkingChat:
                     try:
                         result = await selected_tool.ainvoke(call["args"])
                     except (ValidationError, ValueError):
-                        result = {
-                            "error": (
-                                "Invalid arguments. Ask the user "
-                                "to clarify the required details."
-                            )
-                        }
+                        result = {"error": ("Invalid arguments. Ask the user to clarify the required details.")}
 
                 messages.append(
                     ToolMessage(
@@ -206,25 +205,20 @@ class ParkingChat:
                 state["draft"] = context.draft
                 await self.store.save(session_id, state)
 
-                await memory.add_turn([
-                    HumanMessage(content=question),
-                    AIMessage(content=context.review),
-                ])
+                await memory.add_turn(
+                    [
+                        HumanMessage(content=question),
+                        AIMessage(content=context.review),
+                    ]
+                )
 
                 return self.response(context.review, context.sources)
 
-        return self.response(
-            "I could not finish processing that request. "
-            "Please try a more specific question."
-        )
+        return self.response("I could not finish processing that request. Please try a more specific question.")
 
     @staticmethod
     def extract_text(content) -> str:
         if isinstance(content, str):
             return content
 
-        return "".join(
-            block.get("text", "")
-            for block in content
-            if isinstance(block, dict)
-        )
+        return "".join(block.get("text", "") for block in content if isinstance(block, dict))

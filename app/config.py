@@ -1,11 +1,11 @@
 import os
 from enum import Enum
 from pathlib import Path
+from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
-from typing import Literal
 
 
 class AppEnvironment(str, Enum):
@@ -19,9 +19,7 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 
 def selected_env_file() -> Path:
     # APP_ENV must be set before starting Python to select another environment.
-    environment = AppEnvironment(
-        os.getenv("APP_ENV", AppEnvironment.DEVELOPMENT.value)
-    )
+    environment = AppEnvironment(os.getenv("APP_ENV", AppEnvironment.DEVELOPMENT.value))
     explicit_file = os.getenv("ENV_FILE")
 
     if explicit_file:
@@ -83,10 +81,15 @@ class Settings(BaseSettings):
 
     public_contacts: list[str] = Field(default_factory=list)
     use_injection_model: bool = False
-    injection_model: str = (
-        "protectai/deberta-v3-base-prompt-injection-v2"
-    )
+    injection_model: str = "protectai/deberta-v3-base-prompt-injection-v2"
     spacy_model: str = "en_core_web_sm"
+
+    admin_api_key: SecretStr = SecretStr("local-dev-only-change-me")
+
+    mcp_server_url: str = "http://localhost:9000/mcp"
+    mcp_api_key: SecretStr = SecretStr("local-dev-only-change-me")
+
+    graph_checkpoint_path: str = "./data/graph_checkpoints.sqlite"
 
     @property
     def database_url(self) -> str:

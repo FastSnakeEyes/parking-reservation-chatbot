@@ -36,19 +36,19 @@ class MarkdownLoader:
         documents = []
 
         for path in sorted(self.directory.rglob("*.md")):
-            sections = self.header_splitter.split_text(
-                path.read_text(encoding="utf-8")
-            )
+            sections = self.header_splitter.split_text(path.read_text(encoding="utf-8"))
 
             chunks = self.size_splitter.split_documents(sections)
             source = path.relative_to(self.directory).as_posix()
 
             for index, document in enumerate(chunks):
-                document.metadata.update({
-                    "source": source,
-                    "chunk_index": index,
-                    "id": f"{source}:{index}",
-                })
+                document.metadata.update(
+                    {
+                        "source": source,
+                        "chunk_index": index,
+                        "id": f"{source}:{index}",
+                    }
+                )
 
             documents.extend(chunks)
 
@@ -56,9 +56,7 @@ class MarkdownLoader:
 
 
 def main():
-    parser = argparse.ArgumentParser(
-        description="Load public static Markdown into Milvus"
-    )
+    parser = argparse.ArgumentParser(description="Load public static Markdown into Milvus")
 
     parser.add_argument(
         "--directory",

@@ -4,6 +4,7 @@
                  no API call is made).
 "approximate" -> LangChain's fast heuristic, no extra dependency.
 """
+
 from collections.abc import Callable, Sequence
 from functools import lru_cache
 

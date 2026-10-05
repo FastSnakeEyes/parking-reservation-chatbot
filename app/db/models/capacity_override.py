@@ -47,9 +47,7 @@ class CapacityOverride(Base):
     )
     parking: Mapped[Parking] = relationship(
         "Parking",
-        primaryjoin=(
-            "foreign(CapacityOverride.parking_id) == Parking.id"
-        ),
+        primaryjoin=("foreign(CapacityOverride.parking_id) == Parking.id"),
         back_populates="capacity_overrides",
         viewonly=True,
         lazy="raise",

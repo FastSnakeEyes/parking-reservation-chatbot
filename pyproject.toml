@@ -8,10 +8,15 @@ dependencies = [
     "aiosqlite>=0.22.1",
     "alembic>=1.20.0",
     "asyncpg>=0.31.0",
+    "en-core-web-sm",
     "fastapi>=0.141.1",
     "httpx>=0.28.1",
     "jinja2>=3.1.6",
     "langchain>=1.4.2",
+    # Pinned above the resolvable floor: 1.6.5 has a packaging bug (chat.py
+    # typo in messages/__init__.py's lazy-import map) that breaks ChatOpenAI.
+    "langchain-core>=1.6.6",
+    "langchain-mcp-adapters>=0.3.1",
     "langchain-milvus>=0.4.0",
     "langchain-openai>=1.6.6",
     "langchain-text-splitters>=1.1.2",
@@ -27,12 +32,14 @@ dependencies = [
     "redis>=8.1.0",
     "sqlalchemy[asyncio]>=2.1.0",
     "streamlit>=1.64.0",
+    "transformers>=5.18.0",
     "uvicorn[standard]>=0.54.0",
 ]
 
 [dependency-groups]
 dev = [
     "detect-secrets>=1.5.0",
+    "fakeredis>=2.39.0",
     "mypy>=2.3.1",
     "pre-commit>=4.6.2",
     "pytest>=9.1.1",
@@ -88,3 +95,6 @@ plugins = ["pydantic.mypy"]
 strict = true
 warn_unreachable = true
 show_error_codes = true
+
+[tool.uv.sources]
+en-core-web-sm = { url = "https://github.com/explosion/spacy-models/releases/download/en_core_web_sm-3.8.0/en_core_web_sm-3.8.0-py3-none-any.whl" }

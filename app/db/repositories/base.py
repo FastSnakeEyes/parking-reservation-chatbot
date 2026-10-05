@@ -7,36 +7,30 @@ from langchain_core.documents import Document
 
 class AbstractVectorRepository(ABC):
     @abstractmethod
-    def create_collection(self, dimension: int) -> None:
-        ...
+    def create_collection(self, dimension: int) -> None: ...
 
     @abstractmethod
     def add_documents(
         self,
         documents: builtins.list[Document],
         batch_size: int = 64,
-    ) -> builtins.list[str]:
-        ...
+    ) -> builtins.list[str]: ...
 
     @abstractmethod
     def search(
         self,
         query: str,
         k: int = 4,
-    ) -> builtins.list[Document]:
-        ...
+    ) -> builtins.list[Document]: ...
 
     @abstractmethod
-    def delete_documents(self, ids: builtins.list[str]) -> None:
-        ...
+    def delete_documents(self, ids: builtins.list[str]) -> None: ...
 
     @abstractmethod
-    def load_collection(self) -> None:
-        ...
+    def load_collection(self) -> None: ...
 
     @abstractmethod
-    def close(self) -> None:
-        ...
+    def close(self) -> None: ...
 
 
 class AbstractSQLRepository[EntityT](ABC):
@@ -44,8 +38,7 @@ class AbstractSQLRepository[EntityT](ABC):
     async def get_by_id(
         self,
         identity: Any,
-    ) -> EntityT | None:
-        ...
+    ) -> EntityT | None: ...
 
     @abstractmethod
     async def list(
@@ -53,21 +46,17 @@ class AbstractSQLRepository[EntityT](ABC):
         *,
         offset: int = 0,
         limit: int = 100,
-    ) -> builtins.list[EntityT]:
-        ...
+    ) -> builtins.list[EntityT]: ...
 
     @abstractmethod
-    async def add(self, entity: EntityT) -> EntityT:
-        ...
+    async def add(self, entity: EntityT) -> EntityT: ...
 
     @abstractmethod
     async def update(
         self,
         identity: Any,
         values: Mapping[str, Any],
-    ) -> EntityT | None:
-        ...
+    ) -> EntityT | None: ...
 
     @abstractmethod
-    async def delete(self, identity: Any) -> bool:
-        ...
+    async def delete(self, identity: Any) -> bool: ...

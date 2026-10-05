@@ -30,11 +30,7 @@ class MilvusRepository(AbstractVectorRepository):
             )
 
             field = next(
-                (
-                    field
-                    for field in description["fields"]
-                    if field["name"] == "vector"
-                ),
+                (field for field in description["fields"] if field["name"] == "vector"),
                 None,
             )
 
@@ -42,9 +38,7 @@ class MilvusRepository(AbstractVectorRepository):
                 raise ValueError("Collection has no vector field")
 
             if int(field["params"]["dim"]) != dimension:
-                raise ValueError(
-                    "Collection and embedding dimensions differ"
-                )
+                raise ValueError("Collection and embedding dimensions differ")
 
             return
 
@@ -66,17 +60,13 @@ class MilvusRepository(AbstractVectorRepository):
         if batch_size < 1:
             raise ValueError("batch_size must be positive")
 
-        documents = [
-            doc for doc in documents if doc.page_content.strip()
-        ]
+        documents = [doc for doc in documents if doc.page_content.strip()]
         ids = []
 
         for offset in range(0, len(documents), batch_size):
-            batch = documents[offset:offset + batch_size]
+            batch = documents[offset : offset + batch_size]
 
-            vectors = self.embeddings.embed_documents(
-                [doc.page_content for doc in batch]
-            )
+            vectors = self.embeddings.embed_documents([doc.page_content for doc in batch])
 
             if len(vectors) != len(batch):
                 raise ValueError("Embedding count differs from documents")
@@ -90,22 +80,19 @@ class MilvusRepository(AbstractVectorRepository):
                 identity = document.metadata.get("id")
 
                 if identity is None:
-                    identity = (
-                        f"{document.metadata.get('source', '')}:"
-                        f"{document.page_content}"
-                    )
+                    identity = f"{document.metadata.get('source', '')}:{document.page_content}"
 
-                document_id = hashlib.sha256(
-                    str(identity).encode("utf-8")
-                ).hexdigest()
+                document_id = hashlib.sha256(str(identity).encode("utf-8")).hexdigest()
 
-                rows.append({
-                    "id": document_id,
-                    "vector": vector,
-                    "text": document.page_content,
-                    "metadata": document.metadata,
-                    "embedding_model": self.embedding_model,
-                })
+                rows.append(
+                    {
+                        "id": document_id,
+                        "vector": vector,
+                        "text": document.page_content,
+                        "metadata": document.metadata,
+                        "embedding_model": self.embedding_model,
+                    }
+                )
 
             self.client.upsert(
                 collection_name=self.collection_name,
@@ -142,9 +129,7 @@ class MilvusRepository(AbstractVectorRepository):
             entity = hit["entity"]
 
             if entity.get("embedding_model") != self.embedding_model:
-                raise ValueError(
-                    "Embedding model mismatch. Use a separate collection."
-                )
+                raise ValueError("Embedding model mismatch. Use a separate collection.")
 
             documents.append(
                 Document(

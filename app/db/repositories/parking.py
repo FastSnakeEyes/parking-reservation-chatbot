@@ -93,15 +93,9 @@ class ParkingRepository(PostgresRepository[Parking]):
         space_type: str,
     ) -> dict[str, Any] | None:
         if space_type not in {"standard", "ev"}:
-            raise ValueError(
-                "space_type must be 'standard' or 'ev'"
-            )
+            raise ValueError("space_type must be 'standard' or 'ev'")
 
-        day_type = (
-            "weekend"
-            if on_date.isoweekday() >= 6
-            else "weekday"
-        )
+        day_type = "weekend" if on_date.isoweekday() >= 6 else "weekday"
 
         statement = sa.select(
             Price.space_type,
@@ -147,10 +141,7 @@ class ParkingRepository(PostgresRepository[Parking]):
 
         result = await self.session.execute(statement)
 
-        return [
-            dict(row)
-            for row in result.mappings().all()
-        ]
+        return [dict(row) for row in result.mappings().all()]
 
     async def get_capacity_overrides(
         self,
@@ -193,10 +184,7 @@ class ParkingRepository(PostgresRepository[Parking]):
 
         result = await self.session.execute(statement)
 
-        return [
-            dict(row)
-            for row in result.mappings().all()
-        ]
+        return [dict(row) for row in result.mappings().all()]
 
     async def get_public_info(
         self,

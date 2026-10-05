@@ -9,12 +9,12 @@ from fastapi.encoders import jsonable_encoder
 from langchain_core.tools import BaseTool, tool
 from starlette.concurrency import run_in_threadpool
 
+from app.ai.guardrails import get_pii_guard
 from app.config import settings
 from app.db.models import Parking
-from app.db.repositories.base import AbstractVectorRepository
+from app.db.repositories.base import AbstractSQLRepository, AbstractVectorRepository
 from app.db.repositories.parking import ParkingRepository
 from app.schemas.chat import BookingInput
-from app.db.repositories.base import AbstractSQLRepository
 
 
 @dataclass
@@ -44,12 +44,7 @@ def create_parking_tools(
             ).order_by(Parking.id)
         )
 
-        return {
-            "parkings": [
-                dict(row)
-                for row in result.mappings().all()
-            ]
-        }
+        return {"parkings": [dict(row) for row in result.mappings().all()]}
 
     @tool
     async def get_parking_info(
@@ -61,9 +56,7 @@ def create_parking_tools(
         Bookable capacity is not the number of free spaces.
         """
 
-        requested_date = on_date or datetime.now(
-            local_timezone
-        ).date()
+        requested_date = on_date or datetime.now(local_timezone).date()
 
         info = await repository.get_public_info(
             parking_id=parking_id,
@@ -83,6 +76,9 @@ def create_parking_tools(
         names, car numbers, or private booking details.
         """
 
+        if await run_in_threadpool(get_pii_guard().contains_pii, query):
+            return {"error": ("Query must not contain personal details. Rephrase using public topic keywords only.")}
+
         documents = await run_in_threadpool(
             vector_repository.search,
             query=query,
@@ -95,17 +91,21 @@ def create_parking_tools(
             label = len(context.sources) + 1
             source = document.metadata.get("source", "unknown")
 
-            context.sources.append({
-                "label": label,
-                "source": source,
-                "chunk_index": document.metadata.get("chunk_index"),
-            })
+            context.sources.append(
+                {
+                    "label": label,
+                    "source": source,
+                    "chunk_index": document.metadata.get("chunk_index"),
+                }
+            )
 
-            results.append({
-                "label": label,
-                "source": source,
-                "text": document.page_content,
-            })
+            results.append(
+                {
+                    "label": label,
+                    "source": source,
+                    "text": document.page_content,
+                }
+            )
 
         return {"documents": results}
 
@@ -138,9 +138,7 @@ def create_parking_tools(
 
         info = await repository.get_public_info(
             parking_id=parking_id,
-            on_date=booking.starts_at.astimezone(
-                local_timezone
-            ).date(),
+            on_date=booking.starts_at.astimezone(local_timezone).date(),
         )
 
         if info is None:
@@ -163,9 +161,7 @@ def create_parking_tools(
         elif hours["is_closed"]:
             schedule = "Closed on the starting date"
         else:
-            schedule = (
-                f"{hours['open_time']}–{hours['close_time']}"
-            )
+            schedule = f"{hours['open_time']}–{hours['close_time']}"
 
         context.draft = {
             "id": str(uuid4()),

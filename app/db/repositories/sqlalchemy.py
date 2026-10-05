@@ -8,9 +8,7 @@ from app.db.models import Base
 from app.db.repositories.base import AbstractSQLRepository
 
 
-class SQLAlchemyRepository[ModelT: Base](
-    AbstractSQLRepository[ModelT]
-):
+class SQLAlchemyRepository[ModelT: Base](AbstractSQLRepository[ModelT]):
     def __init__(
         self,
         session: AsyncSession,
@@ -32,16 +30,9 @@ class SQLAlchemyRepository[ModelT: Base](
         limit: int = 100,
     ) -> builtins.list[ModelT]:
         if offset < 0 or limit < 1:
-            raise ValueError(
-                "offset must be >= 0 and limit must be > 0"
-            )
+            raise ValueError("offset must be >= 0 and limit must be > 0")
 
-        statement = (
-            sa.select(self.model)
-            .order_by(*sa.inspect(self.model).primary_key)
-            .offset(offset)
-            .limit(limit)
-        )
+        statement = sa.select(self.model).order_by(*sa.inspect(self.model).primary_key).offset(offset).limit(limit)
 
         result = await self.session.scalars(statement)
         return builtins.list(result.all())
@@ -61,19 +52,13 @@ class SQLAlchemyRepository[ModelT: Base](
         allowed_fields = {
             attribute.key
             for attribute in mapper.column_attrs
-            if not any(
-                column.primary_key
-                for column in attribute.columns
-            )
+            if not any(column.primary_key for column in attribute.columns)
         }
 
         invalid_fields = set(values) - allowed_fields
 
         if invalid_fields:
-            raise ValueError(
-                f"Unknown or protected fields: "
-                f"{sorted(invalid_fields)}"
-            )
+            raise ValueError(f"Unknown or protected fields: {sorted(invalid_fields)}")
 
         entity = await self.get_by_id(identity)
 

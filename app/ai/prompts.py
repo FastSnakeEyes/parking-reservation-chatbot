@@ -2,6 +2,7 @@
 
 SYSTEM_PROMPT stays in app/ai/prompts.py; this module builds the chat and summary prompts.
 """
+
 from operator import itemgetter
 
 from langchain_core.messages import SystemMessage, trim_messages
@@ -47,15 +48,17 @@ Never retrieve another customer's reservation.
 The user can type cancel to clear the conversation.
 """
 
-CHAT_PROMPT = ChatPromptTemplate.from_messages([
-    # Message object, so {braces} inside SYSTEM_PROMPT are not treated as template variables.
-    # Static content first -> stable prefix for OpenAI prompt caching.
-    SystemMessage(content=SYSTEM_PROMPT),
-    MessagesPlaceholder("summary", optional=True),  # [] until older turns get summarized
-    MessagesPlaceholder("history"),                 # recent turns, verbatim
-    ("system", "Current local date/time: {now} ({timezone})"),
-    ("human", "{question}"),
-])
+CHAT_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        # Message object, so {braces} inside SYSTEM_PROMPT are not treated as template variables.
+        # Static content first -> stable prefix for OpenAI prompt caching.
+        SystemMessage(content=SYSTEM_PROMPT),
+        MessagesPlaceholder("summary", optional=True),  # [] until older turns get summarized
+        MessagesPlaceholder("history"),  # recent turns, verbatim
+        ("system", "Current local date/time: {now} ({timezone})"),
+        ("human", "{question}"),
+    ]
+)
 
 # Safety net: even if the summary step lags behind, never send more than this.
 HISTORY_TRIMMER = trim_messages(
@@ -67,17 +70,17 @@ HISTORY_TRIMMER = trim_messages(
 )
 
 # {"summary", "history", "question", "now", "timezone"} -> ready-to-send prompt
-BUILD_PROMPT = (
-    RunnablePassthrough.assign(history=itemgetter("history") | HISTORY_TRIMMER)
-    | CHAT_PROMPT
-)
+BUILD_PROMPT = RunnablePassthrough.assign(history=itemgetter("history") | HISTORY_TRIMMER) | CHAT_PROMPT
 
-SUMMARY_PROMPT = ChatPromptTemplate.from_messages([
-    ("system",
-     "You maintain a running summary of a conversation between a user and a parking "
-     "reservation assistant. Update the existing summary with the new messages. "
-     "Keep: what the user asked, details they gave (name, car plate, parking, dates), "
-     "decisions made and open questions. Drop small talk. At most 150 words."),
-    ("human",
-     "Current summary:\n{summary}\n\nNew messages:\n{new_lines}\n\nUpdated summary:"),
-])
+SUMMARY_PROMPT = ChatPromptTemplate.from_messages(
+    [
+        (
+            "system",
+            "You maintain a running summary of a conversation between a user and a parking "
+            "reservation assistant. Update the existing summary with the new messages. "
+            "Keep: what the user asked, details they gave (name, car plate, parking, dates), "
+            "decisions made and open questions. Drop small talk. At most 150 words.",
+        ),
+        ("human", "Current summary:\n{summary}\n\nNew messages:\n{new_lines}\n\nUpdated summary:"),
+    ]
+)

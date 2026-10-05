@@ -29,7 +29,7 @@ class RedisChatHistory(BaseChatMessageHistory):
         async with self.redis.pipeline(transaction=True) as pipe:
             pipe.rpush(self.key, *self._dump(messages))
             pipe.ltrim(self.key, -self.max_messages, -1)  # keep only the newest messages
-            pipe.expire(self.key, self.ttl)               # expires together with the cookie
+            pipe.expire(self.key, self.ttl)  # expires together with the cookie
             await pipe.execute()
 
     async def areplace(self, messages: Sequence[BaseMessage]) -> None:

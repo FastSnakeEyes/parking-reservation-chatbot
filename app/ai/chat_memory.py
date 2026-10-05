@@ -37,11 +37,7 @@ class SummaryBufferMemory:
         """Prompt variables: {'summary': [SystemMessage] or [], 'history': [...]}."""
         summary = _text(await self.redis.get(self.summary_key))
         return {
-            "summary": (
-                [SystemMessage(content=f"Summary of the earlier conversation:\n{summary}")]
-                if summary
-                else []
-            ),
+            "summary": ([SystemMessage(content=f"Summary of the earlier conversation:\n{summary}")] if summary else []),
             "history": await self.history.aget_messages(),
         }
 
@@ -71,10 +67,12 @@ class SummaryBufferMemory:
             return
 
         current = _text(await self.redis.get(self.summary_key))
-        new_summary = await self.summarize.ainvoke({
-            "summary": current or "(empty)",
-            "new_lines": get_buffer_string(older),
-        })
+        new_summary = await self.summarize.ainvoke(
+            {
+                "summary": current or "(empty)",
+                "new_lines": get_buffer_string(older),
+            }
+        )
 
         await self.redis.set(self.summary_key, new_summary, ex=settings.cookie_ttl)
         await self.history.areplace(recent)

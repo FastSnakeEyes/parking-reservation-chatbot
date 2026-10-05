@@ -8,9 +8,7 @@ from app.db.models import Base
 from app.db.repositories.sqlalchemy import SQLAlchemyRepository
 
 
-class PostgresRepository[ModelT: Base](
-    SQLAlchemyRepository[ModelT]
-):
+class PostgresRepository[ModelT: Base](SQLAlchemyRepository[ModelT]):
     async def upsert_many(
         self,
         rows: builtins.list[dict[str, Any]],
@@ -19,10 +17,7 @@ class PostgresRepository[ModelT: Base](
         table = self.model.__table__
 
         column_names = set(table.columns.keys())
-        primary_keys = [
-            column.name
-            for column in table.primary_key
-        ]
+        primary_keys = [column.name for column in table.primary_key]
 
         # Validate every row before issuing writes.
         for row in rows:
@@ -30,14 +25,10 @@ class PostgresRepository[ModelT: Base](
             missing_keys = set(primary_keys) - set(row)
 
             if unknown_fields:
-                raise ValueError(
-                    f"Unknown fields: {sorted(unknown_fields)}"
-                )
+                raise ValueError(f"Unknown fields: {sorted(unknown_fields)}")
 
             if missing_keys:
-                raise ValueError(
-                    f"Missing primary keys: {sorted(missing_keys)}"
-                )
+                raise ValueError(f"Missing primary keys: {sorted(missing_keys)}")
 
         for row in rows:
             values = dict(row)
@@ -46,10 +37,7 @@ class PostgresRepository[ModelT: Base](
             for name, value in values.items():
                 column = table.c[name]
 
-                if (
-                    isinstance(column.type, sa.Time)
-                    and isinstance(value, str)
-                ):
+                if isinstance(column.type, sa.Time) and isinstance(value, str):
                     values[name] = sa.cast(
                         sa.literal(value, type_=sa.String()),
                         column.type,
@@ -57,11 +45,7 @@ class PostgresRepository[ModelT: Base](
 
             statement = insert(table).values(**values)
 
-            updates = {
-                name: statement.excluded[name]
-                for name in row
-                if name not in primary_keys
-            }
+            updates = {name: statement.excluded[name] for name in row if name not in primary_keys}
 
             if updates:
                 statement = statement.on_conflict_do_update(
