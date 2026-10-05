@@ -14,6 +14,8 @@ services:
         condition: service_healthy
       milvus:
         condition: service_healthy
+      mcp-server:
+        condition: service_healthy
 
   postgres:
     image: ${POSTGRES_IMAGE}
@@ -40,6 +42,24 @@ services:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
       timeout: 3s
+      retries: 10
+
+  # Stage 3: MCP server recording administrator-approved reservations to a file.
+  mcp-server:
+    build: .
+    command: ["uv", "run", "--frozen", "--no-sync", "python", "-m", "mcp_server.server"]
+    env_file:
+      - ${ENV_FILE:-.env.development}
+    environment:
+      MCP_PORT: "9000"
+    ports:
+      - "${BIND_ADDRESS}:${MCP_SERVER_PUBLISHED_PORT:-9000}:9000"
+    volumes:
+      - mcp_reservations:/data
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:9000/health')"]
+      interval: 10s
+      timeout: 5s
       retries: 10
 
   # Milvus standalone with embedded etcd and local storage (no MinIO / etcd containers)
@@ -69,3 +89,4 @@ volumes:
   postgres_data:
   redis_data:
   milvus_data:
+  mcp_reservations:
