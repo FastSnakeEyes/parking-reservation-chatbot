@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>{{ title }}</title>
+
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', path='/chat.css') }}?v=4"
+  >
+
+  <script
+    src="{{ url_for('static', path='/chat.js') }}?v=4"
+    defer
+  ></script>
+</head>
+
+<body>
+  <main class="chat-app">
+    <header class="chat-header">
+      <div>
+        <span class="eyebrow">VilniusPark</span>
+        <h1>{{ title }}</h1>
+        <p>Check parking information and request a reservation.</p>
+      </div>
+
+      <button
+        id="reset-button"
+        class="secondary-button"
+        type="button"
+      >
+        New conversation
+      </button>
+    </header>
+
+    <aside class="notice">
+      Reservation requests require administrator approval.
+    </aside>
+
+    <section
+      id="messages"
+      class="messages"
+      role="log"
+      aria-label="Conversation"
+      aria-live="polite"
+      aria-relevant="additions"
+      aria-busy="false"
+    >
+      <article class="message assistant">
+        <div class="message-label">Assistant</div>
+        <div class="message-text">Hello! I can check parking prices and opening hours, explain the rules, or help you request a reservation. How can I help?</div>
+      </article>
+    </section>
+
+    <nav class="suggestions" aria-label="Example questions">
+      <button
+        class="suggestion"
+        type="button"
+        data-message="Which parking locations are available?"
+      >
+        Parking locations
+      </button>
+
+      <button
+        class="suggestion"
+        type="button"
+        data-message="What are the general booking rules?"
+      >
+        Booking rules
+      </button>
+
+      <button
+        class="suggestion booking-button"
+        type="button"
+        data-message="I want to reserve a parking space."
+      >
+        Book parking
+      </button>
+    </nav>
+
+    <p id="status" class="status" role="status"></p>
+
+    <form id="chat-form" class="composer">
+      <label for="message-input" class="visually-hidden">
+        Your message
+      </label>
+
+      <textarea
+        id="message-input"
+        name="message"
+        rows="2"
+        maxlength="4000"
+        placeholder="Ask a question or start a reservation…"
+        autocomplete="off"
+        required
+      ></textarea>
+
+      <button
+        id="send-button"
+        class="primary-button"
+        type="submit"
+      >
+        Send
+      </button>
+    </form>
+
+    <footer class="chat-footer">
+      Enter to send · Shift+Enter for a new line.
+      After reviewing a request, type <strong>confirm</strong> to submit.
+      Type <strong>cancel</strong> to clear the conversation.
+    </footer>
+
+    <noscript>
+      <p class="notice">
+        Enable JavaScript to use this chat.
+      </p>
+    </noscript>
+  </main>
+</body>
+</html>

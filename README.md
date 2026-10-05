@@ -46,3 +46,14 @@ uv run ruff format .
 uv run ruff check .
 uv run ruff format --check .
 ```
+
+
+
+docker compose --env-file .env.development up --build -d
+
+docker compose --env-file .env.development run --rm --no-deps api uv run --frozen --no-sync alembic revision --autogenerate -m "init create parking tables"
+docker compose --env-file .env.development run --rm --no-deps api uv run --frozen --no-sync alembic upgrade head
+docker compose --env-file .env.development run --rm --no-deps api uv run --frozen --no-sync alembic current
+
+docker compose --env-file .env.development run --rm --no-deps api python -m scripts.ingest_static
+docker compose --env-file .env.development run --rm --no-deps api python -m scripts.ingest_dynamic

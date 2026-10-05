@@ -2,24 +2,25 @@ services:
   api:
     build: .
     ports:
-      - "8000:8000"
+      - "${API_PORT}:8000"
     env_file:
       - ${ENV_FILE:-.env.development}
-    environment:
-      POSTGRES_HOST: postgres
-      REDIS_HOST: redis
+    volumes:
+      - ./migrations:/app/migrations
     depends_on:
       postgres:
         condition: service_healthy
       redis:
         condition: service_healthy
+      milvus:
+        condition: service_healthy
 
   postgres:
-    image: postgres:18
+    image: ${POSTGRES_IMAGE}
     env_file:
       - ${ENV_FILE:-.env.development}
     ports:
-      - "5432:5432"
+      - "${BIND_ADDRESS}:${POSTGRES_PUBLISHED_PORT}:5432"
     volumes:
       - postgres_data:/var/lib/postgresql
     healthcheck:
@@ -29,9 +30,10 @@ services:
       retries: 10
 
   redis:
-    image: redis:7-alpine
+    image: ${REDIS_IMAGE}
     ports:
-      - "6379:6379"
+      - "${BIND_ADDRESS}:${REDIS_PUBLISHED_PORT}:6379"
+    command: ["redis-server", "--appendonly", "yes"]
     volumes:
       - redis_data:/data
     healthcheck:
@@ -40,6 +42,30 @@ services:
       timeout: 3s
       retries: 10
 
+  # Milvus standalone with embedded etcd and local storage (no MinIO / etcd containers)
+  milvus:
+    image: ${MILVUS_IMAGE:-milvusdb/milvus:v2.5.4}
+    command: ["milvus", "run", "standalone"]
+    security_opt:
+      - seccomp:unconfined
+    environment:
+      ETCD_USE_EMBED: "true"
+      ETCD_DATA_DIR: /var/lib/milvus/etcd
+      ETCD_CONFIG_PATH: /milvus/configs/embedEtcd.yaml
+      COMMON_STORAGETYPE: local
+    ports:
+      - "${BIND_ADDRESS}:${MILVUS_PUBLISHED_PORT:-19530}:19530"
+    volumes:
+      - milvus_data:/var/lib/milvus
+      - ./milvus/embedEtcd.yaml:/milvus/configs/embedEtcd.yaml:ro
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9091/healthz"]
+      interval: 10s
+      timeout: 5s
+      start_period: 60s
+      retries: 10
+
 volumes:
   postgres_data:
   redis_data:
+  milvus_data:

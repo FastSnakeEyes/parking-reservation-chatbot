@@ -1,0 +1,230 @@
+import asyncio
+import json
+from datetime import datetime
+from uuid import UUID
+from zoneinfo import ZoneInfo
+
+from fastapi.encoders import jsonable_encoder
+from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+from langchain_openai import ChatOpenAI
+from pydantic import ValidationError
+from redis.asyncio import Redis
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from app.ai.prompts import BUILD_PROMPT
+from app.ai.tools import ToolContext, create_parking_tools
+from app.config import settings
+from app.db.repositories.base import AbstractVectorRepository
+from app.db.repositories.parking import ParkingRepository
+from app.db.repositories.reservation import ReservationRepository
+from app.schemas.chat import BookingInput
+from app.ai.chat_memory import SummaryBufferMemory
+from app.services.chat_store import ChatStore
+
+REQUEST_TIMEOUT_SECONDS = 120
+
+
+class ParkingChat:
+    def __init__(
+        self,
+        session: AsyncSession,
+        redis: Redis,
+        vector_repository: AbstractVectorRepository,
+        llm: ChatOpenAI,
+        summary_llm: ChatOpenAI | None = None,
+    ):
+        self.llm = llm
+        self.summary_llm = summary_llm or llm
+        self.redis = redis
+        self.vector_repository = vector_repository
+        self.repository = ParkingRepository(session)
+        self.reservations = ReservationRepository(session)
+        self.store = ChatStore(redis)
+        self.timezone = ZoneInfo(settings.timezone)
+
+    @staticmethod
+    def response(answer: str, sources: list | None = None) -> dict:
+        return {
+            "answer": answer,
+            "sources": sources or [],
+        }
+
+    def memory(self, session_id: str) -> SummaryBufferMemory:
+        return SummaryBufferMemory(
+            self.redis,
+            session_id,
+            summarizer=self.summary_llm,
+        )
+
+    async def confirm(self, state: dict, memory: SummaryBufferMemory) -> dict:
+        draft = state.get("draft")
+
+        if draft is None:
+            previous_id = state.get("last_reservation_id")
+
+            if previous_id:
+                return self.response(
+                    "Your previous request was already submitted.\n"
+                    f"Reference: {previous_id}"
+                )
+
+            return self.response("There is no reviewed reservation to confirm.")
+
+        booking = BookingInput.model_validate(draft["data"])
+
+        try:
+            reservation_id = await self.reservations.submit_pending(
+                reservation_id=UUID(draft["id"]),
+                booking=booking,
+            )
+        except ValueError as exc:
+            state["draft"] = None
+
+            return self.response(
+                f"The request cannot be submitted: {exc}. "
+                "Please provide corrected details."
+            )
+
+        state["draft"] = None
+        state["last_reservation_id"] = str(reservation_id)
+        await memory.clear()  # start fresh after a submitted booking
+
+        return self.response(
+            "Your reservation request was saved and is awaiting "
+            "administrator approval.\n"
+            f"Reference: {reservation_id}"
+        )
+
+    async def ask(self, session_id: str, question: str) -> dict:
+        question = question.strip()
+
+        if not question:
+            raise ValueError("Question must not be blank")
+
+        lock = self.store.lock(session_id)
+
+        if not await lock.acquire():
+            return self.response("Your previous message is still being processed.")
+
+        try:
+            async with asyncio.timeout(REQUEST_TIMEOUT_SECONDS):
+                return await self._ask(session_id, question)
+        finally:
+            await lock.release()
+
+    async def _ask(self, session_id: str, question: str) -> dict:
+        state = await self.store.load(session_id)
+        memory = self.memory(session_id)
+        command = question.casefold()
+
+        if command == "cancel":
+            await self.store.clear(session_id)
+            await memory.clear()
+
+            return self.response(
+                "The conversation and unsent booking draft were cleared."
+            )
+
+        # The model cannot authorize a database write.
+        if command == "confirm":
+            result = await self.confirm(state, memory)
+            await self.store.save(session_id, state)
+            return result
+
+        # Invalidate an old review before processing a correction.
+        state["draft"] = None
+        await self.store.save(session_id, state)
+
+        context = ToolContext()
+
+        tools = create_parking_tools(
+            repository=self.repository,
+            vector_repository=self.vector_repository,
+            reservations=self.reservations,
+            context=context,
+        )
+        tools_by_name = {item.name: item for item in tools}
+
+        model = self.llm.bind_tools(
+            tools,
+            parallel_tool_calls=False,
+        )
+
+        prompt = await BUILD_PROMPT.ainvoke({
+            **await memory.load(),  # running summary + recent turns
+            "question": question,
+            "now": datetime.now(self.timezone).strftime("%Y-%m-%d %H:%M"),
+            "timezone": settings.timezone,
+        })
+        messages = prompt.to_messages()
+
+        for _ in range(settings.max_tool_rounds):
+            answer = await model.ainvoke(messages)
+            messages.append(answer)
+
+            if not answer.tool_calls:
+                text = self.extract_text(answer.content)
+
+                # Store only question + final answer; tool chatter stays in this turn.
+                await memory.add_turn([
+                    HumanMessage(content=question),
+                    AIMessage(content=text),
+                ])
+
+                return self.response(text, context.sources)
+
+            # Sequential execution for the request's SQL session.
+            for call in answer.tool_calls:
+                selected_tool = tools_by_name.get(call["name"])
+
+                if context.review is not None:
+                    result = {"error": "Review ready; wait for confirmation."}
+                elif selected_tool is None:
+                    result = {"error": "Unknown tool"}
+                else:
+                    try:
+                        result = await selected_tool.ainvoke(call["args"])
+                    except (ValidationError, ValueError):
+                        result = {
+                            "error": (
+                                "Invalid arguments. Ask the user "
+                                "to clarify the required details."
+                            )
+                        }
+
+                messages.append(
+                    ToolMessage(
+                        content=json.dumps(
+                            jsonable_encoder(result),
+                            ensure_ascii=False,
+                        ),
+                        tool_call_id=call["id"],
+                    )
+                )
+
+            if context.review is not None:
+                state["draft"] = context.draft
+                await self.store.save(session_id, state)
+
+                await memory.add_turn([
+                    HumanMessage(content=question),
+                    AIMessage(content=context.review),
+                ])
+
+                return self.response(context.review, context.sources)
+
+        return self.response(
+            "I could not finish processing that request. "
+            "Please try a more specific question."
+        )
+
+    @staticmethod
+    def extract_text(content) -> str:
+        if isinstance(content, str):
+            return content
+
+        return "".join(
+            block.get("text", "")
+            for block in content
+            if isinstance(block, dict)
+        )
