@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <title>{{ title }}</title>
+
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', path='/chat.css') }}?v=4"
+  >
+  <link
+    rel="stylesheet"
+    href="{{ url_for('static', path='/admin.css') }}?v=1"
+  >
+
+  <script
+    src="{{ url_for('static', path='/admin.js') }}?v=1"
+    defer
+  ></script>
+</head>
+
+<body>
+  <main class="chat-app admin-app">
+    <header class="chat-header">
+      <div>
+        <span class="eyebrow">VilniusPark</span>
+        <h1>{{ title }}</h1>
+        <p>Review and decide on pending reservation requests.</p>
+      </div>
+
+      <button
+        id="refresh-button"
+        class="secondary-button"
+        type="button"
+      >
+        Refresh
+      </button>
+    </header>
+
+    <form id="key-form" class="admin-key-form">
+      <label for="admin-key">Admin key</label>
+
+      <input
+        id="admin-key"
+        name="admin-key"
+        type="password"
+        autocomplete="off"
+        placeholder="X-Admin-Key"
+      >
+
+      <button
+        id="save-key-button"
+        class="secondary-button"
+        type="submit"
+      >
+        Save
+      </button>
+    </form>
+
+    <p id="status" class="status" role="status"></p>
+
+    <section
+      id="reservations"
+      class="reservations"
+      aria-label="Pending reservations"
+      aria-live="polite"
+    ></section>
+
+    <template id="reservation-template">
+      <article class="reservation">
+        <p class="reservation-message"></p>
+        <p class="reservation-meta"></p>
+        <div class="reservation-actions">
+          <button class="primary-button approve-button" type="button">Approve</button>
+          <button class="secondary-button reject-button" type="button">Reject</button>
+        </div>
+      </article>
+    </template>
+
+    <noscript>
+      <p class="notice">
+        Enable JavaScript to use the admin console.
+      </p>
+    </noscript>
+  </main>
+</body>
+</html>

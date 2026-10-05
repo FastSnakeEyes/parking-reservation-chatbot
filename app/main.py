@@ -111,7 +111,8 @@ templates = Jinja2Templates(
 # Defines POST /chat using ParkingChat and SQL/vector tools.
 app.include_router(chat_router)
 
-# Defines the admin console API (Stage 2); ui/admin_app.py is its client.
+# Defines the admin console API (Stage 2); the /admin page below and
+# ui/admin_app.py (Streamlit) are both clients of it.
 app.include_router(admin_router)
 
 
@@ -139,6 +140,19 @@ async def root(request: Request):
     set_chat_cookie(response, session_id)
 
     return response
+
+
+@app.get("/admin", response_class=HTMLResponse)
+async def admin_console(request: Request):
+    # The page itself needs no auth to load; it collects the admin key via
+    # JS and sends it as X-Admin-Key on each call to the /admin/* API below.
+    return templates.TemplateResponse(
+        request=request,
+        name="admin.html",
+        context={
+            "title": "VilniusPark Admin Console",
+        },
+    )
 
 
 @app.get("/health")

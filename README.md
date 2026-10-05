@@ -77,11 +77,15 @@ Engineering: Fast Track" course assignment described in [`docs/SPECIFICATION.md`
 ## Usage
 
 - **Chat UI**: open `http://localhost:${API_PORT}/` (default `8000`).
-- **Admin console** (Stage 2, approve/reject pending reservations):
+- **Admin console** (Stage 2, approve/reject pending reservations) - two options,
+  same `/admin/*` API underneath:
+  - Web page: open `http://localhost:${API_PORT}/admin` and enter your `ADMIN_API_KEY`
+    (saved in the browser's local storage).
+  - Streamlit:
 
-  ```bash
-  ADMIN_API_KEY=... API_BASE_URL=http://localhost:8000 make admin-ui
-  ```
+    ```bash
+    ADMIN_API_KEY=... API_BASE_URL=http://localhost:8000 make admin-ui
+    ```
 
 - **Tests** (unit + integration + e2e; spins up its own ephemeral Postgres via
   testcontainers and fakes Redis, so no running stack is required):
