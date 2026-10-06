@@ -12,13 +12,6 @@ from app.db.repositories.postgres import PostgresRepository
 from app.schemas.chat import BookingInput
 
 
-
-class StaleReservation(Exception):
-    """Raised when an operation references a reservation revision/status
-    that no longer matches what's in the database (e.g. a decision made
-    against a reservation that was since decided, or doesn't exist)."""
-
-
 class ReservationRepository(PostgresRepository[Reservation]):
     def __init__(self, session: AsyncSession):
         super().__init__(session=session, model=Reservation)
@@ -77,42 +70,3 @@ class ReservationRepository(PostgresRepository[Reservation]):
             raise
 
         return reservation_id
-
-    async def get_for_update(self, reservation_id: UUID) -> Reservation | None:
-        return await self.session.scalar(
-            sa.select(Reservation).where(Reservation.id == reservation_id).with_for_update()
-        )
-
-    async def mark_decided(
-        self,
-        reservation_id: UUID,
-        expected_version: int,
-        status: str,
-        approved_at: datetime | None = None,
-    ) -> Reservation:
-        """Flush-only (no commit): composes inside ParkingService's atomic
-        decision transaction, alongside AdminDecisionRepository.record().
-
-        Locks the row, then requires it still be 'pending' at exactly
-        expected_version - this is the staleness check for "approval must
-        reference the exact immutable reservation revision reviewed."
-        """
-        reservation = await self.get_for_update(reservation_id)
-
-        if reservation is None:
-            raise StaleReservation(f"Reservation {reservation_id} not found")
-
-        if reservation.status != "pending" or reservation.version != expected_version:
-            raise StaleReservation(
-                f"Reservation {reservation_id} is no longer pending at version {expected_version} "
-                f"(status={reservation.status}, version={reservation.version})"
-            )
-
-        reservation.status = status
-
-        if approved_at is not None:
-            reservation.approved_at = approved_at
-
-        await self.session.flush()
-
-        return reservation
