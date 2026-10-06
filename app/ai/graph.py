@@ -10,8 +10,9 @@ approval step is asynchronous and can take hours:
   behavior.
 - `ApprovalPipeline` is the durable admin-approval + recording graph.
   `admin_approval` calls `interrupt()` and pauses - persisted by a
-  sqlite checkpointer, since the wait for a human decision can take
-  hours or days - and `start()` returns as soon as that happens.
+  Postgres checkpointer (the same database everything else uses), since
+  the wait for a human decision can take hours or days - and `start()`
+  returns as soon as that happens.
   `record_or_close` resumes via `Command(resume=...)` from the admin
   decision endpoint (app/api/routers/admin.py): on approval it calls
   the Stage 3 MCP tool and marks the reservation "recorded"; on

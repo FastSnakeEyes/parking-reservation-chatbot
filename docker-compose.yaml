@@ -7,7 +7,6 @@ services:
       - ${ENV_FILE:-.env.development}
     volumes:
       - ./migrations:/app/migrations
-      - graph_checkpoints:/app/data/graph
     depends_on:
       postgres:
         condition: service_healthy
@@ -91,4 +90,3 @@ volumes:
   redis_data:
   milvus_data:
   mcp_reservations:
-  graph_checkpoints:

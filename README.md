@@ -14,7 +14,7 @@ Engineering: Fast Track" course assignment described in [`docs/SPECIFICATION.md`
 | 1. Guardrails | Presidio+spaCy PII detection/redaction on search queries and answers; optional transformer-based prompt-injection screening | `app/ai/guardrails.py` |
 | 2. Human-in-the-loop admin agent | A LangChain chain drafts the approval-request message; a REST API + Streamlit console is the administrator's side of the exchange | `app/ai/admin_agent.py`, `app/api/routers/admin.py`, `ui/admin_app.py` |
 | 3. MCP server | Standalone server (streamable-HTTP, bearer-token auth) exposing one tool, `record_reservation`, which appends approved reservations to a file | `mcp_server/server.py` |
-| 4. LangGraph orchestration | `user_interaction` node wraps the chat loop; `admin_approval` (durable `interrupt()`, sqlite-checkpointed) + `record_or_close` form the approval pipeline that calls the MCP tool | `app/ai/graph.py` |
+| 4. LangGraph orchestration | `user_interaction` node wraps the chat loop; `admin_approval` (durable `interrupt()`, Postgres-checkpointed) + `record_or_close` form the approval pipeline that calls the MCP tool | `app/ai/graph.py` |
 
 ### Request flow
 
@@ -22,7 +22,7 @@ Engineering: Fast Track" course assignment described in [`docs/SPECIFICATION.md`
    from Milvus/Postgres, or collects booking details and asks the user to `confirm`.
 2. On `confirm`, the reservation is saved to Postgres with `status="pending"`, and
    `ParkingChat.start_approval()` drafts a notification and starts the approval graph, which
-   immediately pauses at `admin_approval` (an `interrupt()`, persisted by a sqlite checkpointer
+   immediately pauses at `admin_approval` (an `interrupt()`, persisted by a Postgres checkpointer
    so it survives a restart).
 3. The administrator polls `GET /admin/reservations` (via `ui/admin_app.py`) and approves or
    rejects. `POST /admin/reservations/{id}/decision` resumes the graph with that decision.

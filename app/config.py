@@ -89,10 +89,6 @@ class Settings(BaseSettings):
     mcp_server_url: str = "http://localhost:9000/mcp"
     mcp_api_key: SecretStr = SecretStr("local-dev-only-change-me")
 
-    # Own subdirectory so a docker volume mounted here doesn't shadow the
-    # read-only static seed docs that also live under data/.
-    graph_checkpoint_path: str = "./data/graph/graph_checkpoints.sqlite"
-
     @property
     def database_url(self) -> str:
         if self.database_url_override is not None:
@@ -100,6 +96,22 @@ class Settings(BaseSettings):
 
         return URL.create(
             drivername="postgresql+asyncpg",
+            username=self.postgres_user,
+            password=self.postgres_password.get_secret_value(),
+            host=self.postgres_host,
+            port=self.postgres_port,
+            database=self.postgres_db,
+        ).render_as_string(hide_password=False)
+
+    @property
+    def database_url_psycopg(self) -> str:
+        """Plain postgresql:// DSN for psycopg (LangGraph's AsyncPostgresSaver),
+        as opposed to database_url's SQLAlchemy-style postgresql+asyncpg://."""
+        if self.database_url_override is not None:
+            return self.database_url_override.get_secret_value().replace("postgresql+asyncpg://", "postgresql://")
+
+        return URL.create(
+            drivername="postgresql",
             username=self.postgres_user,
             password=self.postgres_password.get_secret_value(),
             host=self.postgres_host,

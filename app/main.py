@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from langchain_openai import ChatOpenAI
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from redis.asyncio import Redis
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
@@ -78,10 +78,10 @@ async def lifespan(app: FastAPI):
         # Loads spaCy/Presidio once at startup instead of on the first request.
         await run_in_threadpool(get_pii_guard)
 
-        Path(settings.graph_checkpoint_path).parent.mkdir(parents=True, exist_ok=True)
         checkpointer = await stack.enter_async_context(
-            AsyncSqliteSaver.from_conn_string(settings.graph_checkpoint_path)
+            AsyncPostgresSaver.from_conn_string(settings.database_url_psycopg)
         )
+        await checkpointer.setup()  # idempotent; creates checkpoint tables on first run
         approval_pipeline = ApprovalPipeline(engine, checkpointer)
 
         app.state.db_engine = engine
