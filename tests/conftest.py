@@ -25,6 +25,7 @@ os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
 
 from collections.abc import AsyncIterator
 from datetime import date, time
+from uuid import uuid4
 
 import fakeredis
 import pytest
@@ -127,5 +128,71 @@ async def sample_parking(db_session: AsyncSession) -> Parking:
         )
 
     await db_session.commit()
+
+    return parking
+
+
+@pytest_asyncio.fixture
+async def real_session(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
+    """A plainly-committing session (unlike `db_session`'s rollback-savepoint
+    isolation) on its own connection - needed whenever a test must be
+    visible to a DIFFERENT session/connection (e.g. a service under test
+    that opens its own session, or a genuine concurrency test racing two
+    independent sessions against the same locked row)."""
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        yield session
+
+
+@pytest_asyncio.fixture
+async def real_parking(real_session: AsyncSession) -> Parking:
+    """Same shape as sample_parking, but via real_session (really committed,
+    visible across connections) and with a unique slug so multiple tests
+    using this fixture within one shared, session-scoped Postgres container
+    don't collide."""
+    parking = Parking(
+        slug=f"real-parking-{uuid4()}",
+        name="Real Test Parking",
+        district="Center",
+        latitude=54.68,
+        longitude=25.27,
+        total_spaces=10,
+        bookable_spaces=5,
+    )
+    real_session.add(parking)
+    await real_session.flush()
+
+    real_session.add(
+        ParkingSpaceType(
+            parking_id=parking.id,
+            space_type="standard",
+            total_spaces=10,
+            bookable_spaces=5,
+        )
+    )
+
+    for day in range(1, 8):
+        real_session.add(
+            WorkingHours(
+                parking_id=parking.id,
+                day_of_week=day,
+                open_time=time(0, 0),
+                close_time=time(23, 59),
+                is_closed=False,
+            )
+        )
+
+    for day_type in ("weekday", "weekend"):
+        real_session.add(
+            Price(
+                parking_id=parking.id,
+                space_type="standard",
+                day_type=day_type,
+                valid_from=date(2020, 1, 1),
+                price_per_hour=1,
+                daily_max=10,
+            )
+        )
+
+    await real_session.commit()
 
     return parking

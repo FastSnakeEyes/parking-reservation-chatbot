@@ -42,11 +42,28 @@ class Reservation(Base):
         sa.String(20),
         server_default=sa.text("'pending'"),
     )
+    # Bumped only if a future flow allows correcting a still-pending
+    # reservation; lets an admin decision reference the exact revision it
+    # reviewed and be rejected as stale if the reservation changed since.
+    version: Mapped[int] = mapped_column(
+        sa.Integer,
+        server_default=sa.text("1"),
+    )
     created_at: Mapped[datetime] = mapped_column(
         sa.DateTime(timezone=True),
         server_default=sa.func.now(),
     )
     approved_at: Mapped[datetime | None] = mapped_column(
+        sa.DateTime(timezone=True),
+    )
+
+    # Tracked separately from `status`: an approved reservation must survive
+    # an MCP export failure rather than being lost or stuck re-pending.
+    export_status: Mapped[str] = mapped_column(
+        sa.String(20),
+        server_default=sa.text("'pending'"),
+    )
+    exported_at: Mapped[datetime | None] = mapped_column(
         sa.DateTime(timezone=True),
     )
 
@@ -89,6 +106,10 @@ class Reservation(Base):
             OR approved_at IS NOT NULL
             """,
             name="ck_reservations_approval",
+        ),
+        sa.CheckConstraint(
+            "export_status IN ('pending', 'exported', 'failed')",
+            name="ck_reservations_export_status",
         ),
         sa.Index(
             "ix_reservations_availability",
