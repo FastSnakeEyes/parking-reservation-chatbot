@@ -1,17 +1,11 @@
 from contextlib import AsyncExitStack, asynccontextmanager
-from datetime import date, datetime
 from pathlib import Path
-from uuid import UUID, uuid4
-from zoneinfo import ZoneInfo
 
-from fastapi import Depends, FastAPI, HTTPException, Request
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
-from fastapi.templating import Jinja2Templates
 from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from redis.asyncio import Redis
-from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from starlette.concurrency import run_in_threadpool
 
@@ -19,13 +13,9 @@ from app.ai.graph import ApprovalPipeline
 from app.ai.guardrails import get_pii_guard
 from app.api.routers.admin import router as admin_router
 from app.api.routers.chat import router as chat_router
+from app.api.routers.pages import router as pages_router
 from app.config import settings
-from app.dependencies import (
-    ParkingRepositoryDependency,
-    SQLSessionDependency,
-    create_vector_repository,
-)
-from app.helpers import set_chat_cookie
+from app.dependencies import create_vector_repository
 
 APP_DIR = Path(__file__).resolve().parent
 
@@ -104,127 +94,12 @@ app.mount(
     name="static",
 )
 
-templates = Jinja2Templates(
-    directory=str(APP_DIR / "templates"),
-)
-
 # Defines POST /chat using ParkingChat and SQL/vector tools.
 app.include_router(chat_router)
 
-# Defines the admin console API (Stage 2); the /admin page below and
+# Defines the admin console API (Stage 2); the /admin page and
 # ui/admin_app.py (Streamlit) are both clients of it.
 app.include_router(admin_router)
 
-
-async def get_redis(request: Request) -> Redis:
-    return request.app.state.redis
-
-
-@app.get("/", response_class=HTMLResponse)
-async def root(request: Request):
-    response = templates.TemplateResponse(
-        request=request,
-        name="chat.html",
-        context={
-            "title": "Vilnius Parking Assistant",
-        },
-    )
-
-    cookie = request.cookies.get(settings.cookie_name)
-
-    try:
-        session_id = str(UUID(cookie)) if cookie else str(uuid4())
-    except ValueError:
-        session_id = str(uuid4())
-
-    set_chat_cookie(response, session_id)
-
-    return response
-
-
-@app.get("/admin", response_class=HTMLResponse)
-async def admin_console(request: Request):
-    # The page itself needs no auth to load; it collects the admin key via
-    # JS and sends it as X-Admin-Key on each call to the /admin/* API below.
-    return templates.TemplateResponse(
-        request=request,
-        name="admin.html",
-        context={
-            "title": "VilniusPark Admin Console",
-        },
-    )
-
-
-@app.get("/health")
-async def health(
-    db: SQLSessionDependency,
-    redis: Redis = Depends(get_redis),  # noqa: B008 (standard FastAPI dependency pattern)
-):
-    try:
-        await db.execute(text("SELECT 1"))
-        await redis.ping()
-    except Exception as exc:
-        raise HTTPException(
-            status_code=503,
-            detail="A backing service is unavailable",
-        ) from exc
-
-    return {
-        "api": "ok",
-        "postgres": "ok",
-        "redis": "ok",
-    }
-
-
-@app.get("/parkings")
-async def list_parkings(
-    repository: ParkingRepositoryDependency,
-    offset: int = 0,
-    limit: int = 100,
-):
-    if offset < 0 or not 1 <= limit <= 100:
-        raise HTTPException(
-            status_code=422,
-            detail="offset must be >= 0 and limit must be between 1 and 100",
-        )
-
-    parkings = await repository.list(
-        offset=offset,
-        limit=limit,
-    )
-
-    return [
-        {
-            "id": parking.id,
-            "slug": parking.slug,
-            "name": parking.name,
-            "district": parking.district,
-            "latitude": parking.latitude,
-            "longitude": parking.longitude,
-            "total_spaces": parking.total_spaces,
-            "bookable_spaces": parking.bookable_spaces,
-        }
-        for parking in parkings
-    ]
-
-
-@app.get("/parkings/{parking_id}")
-async def parking_info(
-    parking_id: int,
-    repository: ParkingRepositoryDependency,
-    on_date: date | None = None,
-):
-    requested_date = on_date or datetime.now(ZoneInfo(settings.timezone)).date()
-
-    info = await repository.get_public_info(
-        parking_id=parking_id,
-        on_date=requested_date,
-    )
-
-    if info is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Parking not found",
-        )
-
-    return info
+# Defines GET /, GET /admin (pages) and GET /health.
+app.include_router(pages_router)

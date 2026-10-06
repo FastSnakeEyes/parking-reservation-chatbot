@@ -116,7 +116,7 @@ Engineering: Fast Track" course assignment described in [`docs/SPECIFICATION.md`
 app/
   ai/            chat agent, LangGraph orchestration, admin agent, guardrails, tools,
                  Redis-backed chat history/memory/session store
-  api/routers/   /chat and /admin REST endpoints
+  api/routers/   /chat, /admin REST endpoints, and pages.py (/, /admin, /health)
   db/            SQLAlchemy models and repositories (Postgres)
   schemas/       Pydantic request/response models
   static/, templates/   the chat web UI

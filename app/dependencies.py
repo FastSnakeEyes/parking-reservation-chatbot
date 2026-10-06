@@ -6,13 +6,13 @@ from uuid import UUID
 from fastapi import Depends, HTTPException, Request
 from langchain_openai import OpenAIEmbeddings
 from pymilvus import MilvusClient
+from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.parking_chat import ParkingChat
 from app.config import settings
 from app.db.repositories.base import AbstractVectorRepository
 from app.db.repositories.milvus import MilvusRepository
-from app.db.repositories.parking import ParkingRepository
 
 
 def create_vector_repository() -> MilvusRepository:
@@ -61,10 +61,14 @@ SQLSessionDependency = Annotated[
 ]
 
 
-def get_parking_repository(
-    session: SQLSessionDependency,
-) -> ParkingRepository:
-    return ParkingRepository(session=session)
+def get_redis(request: Request) -> Redis:
+    return request.app.state.redis
+
+
+RedisDependency = Annotated[
+    Redis,
+    Depends(get_redis),
+]
 
 
 async def require_cookie(request: Request) -> str:
@@ -165,9 +169,4 @@ ChatServiceDependency = Annotated[
 VectorRepositoryDependency = Annotated[
     AbstractVectorRepository,
     Depends(get_vector_repository),
-]
-
-ParkingRepositoryDependency = Annotated[
-    ParkingRepository,
-    Depends(get_parking_repository),
 ]
