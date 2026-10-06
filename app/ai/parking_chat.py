@@ -14,6 +14,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.ai.admin_agent import draft_notification
 from app.ai.chat_memory import SummaryBufferMemory
+from app.ai.chat_store import ChatStore
 from app.ai.graph import ApprovalPipeline
 from app.ai.guardrails import get_pii_guard, is_prompt_injection
 from app.ai.prompts import BUILD_PROMPT
@@ -23,7 +24,6 @@ from app.db.repositories.base import AbstractVectorRepository
 from app.db.repositories.parking import ParkingRepository
 from app.db.repositories.reservation import ReservationRepository
 from app.schemas.chat import BookingInput
-from app.services.chat_store import ChatStore
 
 REQUEST_TIMEOUT_SECONDS = 120
 
