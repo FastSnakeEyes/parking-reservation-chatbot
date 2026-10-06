@@ -114,11 +114,11 @@ Engineering: Fast Track" course assignment described in [`docs/SPECIFICATION.md`
 
 ```
 app/
-  ai/            chat agent, LangGraph orchestration, admin agent, guardrails, tools
+  ai/            chat agent, LangGraph orchestration, admin agent, guardrails, tools,
+                 Redis-backed chat history/memory/session store
   api/routers/   /chat and /admin REST endpoints
   db/            SQLAlchemy models and repositories (Postgres)
   schemas/       Pydantic request/response models
-  services/      Redis-backed chat session store
   static/, templates/   the chat web UI
 mcp_server/      Stage 3 MCP server (records approved reservations to a file)
 ui/              Stage 2 Streamlit admin console
