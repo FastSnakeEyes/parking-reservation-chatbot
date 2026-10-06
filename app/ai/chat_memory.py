@@ -38,20 +38,20 @@ class SummaryBufferMemory:
         summary = _text(await self.redis.get(self.summary_key))
         return {
             "summary": ([SystemMessage(content=f"Summary of the earlier conversation:\n{summary}")] if summary else []),
-            "history": await self.history.aget_messages(),
+            "history": await self.history.get_messages(),
         }
 
     async def add_turn(self, messages: list[BaseMessage]) -> None:
-        await self.history.aadd_messages(messages)
+        await self.history.add_messages(messages)
         await self._prune()
 
     async def clear(self) -> None:
-        await self.history.aclear()
+        await self.history.clear()
         await self.redis.delete(self.summary_key)
 
     async def _prune(self) -> None:
         """When history exceeds history_max_tokens, fold the oldest turns into the summary."""
-        messages = await self.history.aget_messages()
+        messages = await self.history.get_messages()
         if count_tokens(messages) <= settings.history_max_tokens:
             return
 
@@ -75,4 +75,4 @@ class SummaryBufferMemory:
         )
 
         await self.redis.set(self.summary_key, new_summary, ex=settings.cookie_ttl)
-        await self.history.areplace(recent)
+        await self.history.replace(recent)
