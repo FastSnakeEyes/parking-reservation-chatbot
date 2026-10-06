@@ -10,6 +10,7 @@ reservation: "Name | Car Number | Reservation Period | Approval Time".
 """
 
 import asyncio
+import logging
 import os
 from pathlib import Path
 
@@ -18,6 +19,14 @@ from starlette.applications import Starlette
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.requests import Request
 from starlette.responses import JSONResponse
+
+# Self-contained logging setup: this service deliberately doesn't import
+# app.logger/app.config (see module docstring), so it configures its own.
+logging.basicConfig(
+    level=os.environ.get("LOG_LEVEL", "INFO"),
+    format="%(asctime)s %(levelname)-8s %(name)s: %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 RESERVATIONS_FILE = Path(os.environ.get("RESERVATIONS_FILE", "./data/approved_reservations.txt"))
 
@@ -41,6 +50,8 @@ async def record_reservation(
 
     async with _write_lock:
         await asyncio.to_thread(_append_line, line)
+
+    logger.info("Recorded reservation: car=%s, period=%s", car_number, period)
 
     return f"Recorded: {line}"
 
@@ -79,6 +90,7 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
             return await call_next(request)
 
         if request.headers.get("authorization") != f"Bearer {self._token}":
+            logger.warning("Rejected an unauthenticated request to %s", request.url.path)
             return JSONResponse({"error": "Unauthorized"}, status_code=401)
 
         return await call_next(request)

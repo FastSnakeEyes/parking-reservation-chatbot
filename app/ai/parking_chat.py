@@ -23,7 +23,10 @@ from app.config import settings
 from app.db.repositories.base import AbstractVectorRepository
 from app.db.repositories.parking import ParkingRepository
 from app.db.repositories.reservation import ReservationRepository
+from app.logger import get_logger
 from app.schemas.chat import BookingInput
+
+logger = get_logger(__name__)
 
 REQUEST_TIMEOUT_SECONDS = 120
 
@@ -89,6 +92,13 @@ class ParkingChat:
         state["last_reservation_id"] = str(reservation_id)
         await memory.clear()  # start fresh after a submitted booking
 
+        logger.info(
+            "Reservation %s submitted (parking_id=%s, space_type=%s), pending approval",
+            reservation_id,
+            booking.parking_id,
+            booking.space_type,
+        )
+
         # Stage 2/4: hand the reservation off to the admin-approval graph.
         await self.start_approval(reservation_id, booking)
 
@@ -137,6 +147,7 @@ class ParkingChat:
         state["last_reservation_id"] = None  # deliver this notice only once
 
         outcome = "approved and recorded" if reservation.status == "recorded" else "rejected by the administrator"
+        logger.info("Delivering decision notice for reservation %s: %s", reservation_id, reservation.status)
 
         return f"Update: your reservation {reservation_id} was {outcome}.\nYou can ask your question again."
 
@@ -159,6 +170,7 @@ class ParkingChat:
 
     async def _ask(self, session_id: str, question: str) -> dict:
         if await run_in_threadpool(is_prompt_injection, question):
+            logger.warning("Blocked a suspected prompt injection (session=%s)", session_id)
             return self.response("I can't process that request. Please ask about parking information or reservations.")
 
         state = await self.store.load(session_id)

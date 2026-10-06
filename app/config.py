@@ -89,6 +89,12 @@ class Settings(BaseSettings):
     mcp_server_url: str = "http://localhost:9000/mcp"
     mcp_api_key: SecretStr = SecretStr("local-dev-only-change-me")
 
+    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+
+    langsmith_tracing: bool = False
+    langsmith_api_key: SecretStr | None = None
+    langsmith_project: str = "vilniuspark-chatbot"
+
     @property
     def database_url(self) -> str:
         if self.database_url_override is not None:

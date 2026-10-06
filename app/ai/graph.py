@@ -34,6 +34,9 @@ from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.config import settings
 from app.db.repositories.reservation import ReservationRepository
+from app.logger import get_logger
+
+logger = get_logger(__name__)
 
 
 class ChatState(TypedDict):
@@ -99,6 +102,11 @@ def _build_record_or_close(engine: AsyncEngine):
             reservation = await reservations.get_by_id(reservation_id)
 
             if reservation is None or reservation.status != "pending":
+                logger.warning(
+                    "record_or_close: reservation %s not pending (status=%s), skipping",
+                    reservation_id,
+                    reservation.status if reservation else "missing",
+                )
                 return {}
 
             if state["decision"] == "approved":
@@ -123,8 +131,10 @@ def _build_record_or_close(engine: AsyncEngine):
                     reservation_id,
                     {"status": "recorded", "approved_at": approved_at},
                 )
+                logger.info("Reservation %s approved and recorded via MCP", reservation_id)
             else:
                 await reservations.update(reservation_id, {"status": "rejected"})
+                logger.info("Reservation %s rejected", reservation_id)
 
             await session.commit()
 
@@ -154,6 +164,7 @@ class ApprovalPipeline:
 
     async def start(self, reservation_id: UUID, message: str) -> None:
         """Start the approval graph; returns once it pauses at admin_approval."""
+        logger.info("Starting approval graph for reservation %s", reservation_id)
         await self.graph.ainvoke(
             {
                 "reservation_id": str(reservation_id),
@@ -171,6 +182,7 @@ class ApprovalPipeline:
         note: str | None = None,
     ) -> None:
         """Resume a paused approval graph with the administrator's decision."""
+        logger.info("Resuming approval graph for reservation %s with decision=%s", reservation_id, decision)
         await self.graph.ainvoke(
             Command(resume={"decision": decision, "note": note}),
             config=self._config(reservation_id),

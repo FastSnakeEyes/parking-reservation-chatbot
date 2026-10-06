@@ -12,13 +12,17 @@ from app.config import settings
 from app.db.models import Reservation
 from app.db.repositories.reservation import ReservationRepository
 from app.dependencies import SQLSessionDependency
+from app.logger import get_logger
 from app.schemas.admin import DecisionRequest, PendingReservation
+
+logger = get_logger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
 
 
 async def require_admin(x_admin_key: str = Header(default="")) -> None:
     if x_admin_key != settings.admin_api_key.get_secret_value():
+        logger.warning("Rejected an admin request with an invalid X-Admin-Key")
         raise HTTPException(status_code=401, detail="Invalid admin key")
 
 
@@ -69,6 +73,8 @@ async def decide(
 
     if reservation is None or reservation.status != "pending":
         raise HTTPException(status_code=404, detail="No pending reservation with that id")
+
+    logger.info("Admin decision received for reservation %s: %s", reservation_id, payload.decision)
 
     pipeline: ApprovalPipeline = request.app.state.approval_pipeline
     await pipeline.resume(reservation_id, payload.decision, payload.note)

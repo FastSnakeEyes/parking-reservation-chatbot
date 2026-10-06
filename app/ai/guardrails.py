@@ -13,6 +13,9 @@ from presidio_analyzer.nlp_engine import NlpEngineProvider
 from presidio_anonymizer import AnonymizerEngine
 
 from app.config import settings
+from app.logger import get_logger
+
+logger = get_logger(__name__)
 
 DEFAULT_PII_ENTITIES = [
     # No PERSON: en_core_web_sm's NER is unreliable on this domain's many
@@ -86,6 +89,9 @@ class PIIGuard:
         if not results:
             return text
 
+        # Entity types only - never log the matched PII values themselves.
+        logger.info("Redacted PII from text: %s", sorted({result.entity_type for result in results}))
+
         return self._anonymizer.anonymize(
             text=text,
             analyzer_results=results,
@@ -111,5 +117,9 @@ def is_prompt_injection(text: str) -> bool:
         return False
 
     result = get_injection_classifier()(text, truncation=True)[0]
+    flagged = "INJECT" in result["label"].upper() and result["score"] >= 0.5
 
-    return "INJECT" in result["label"].upper() and result["score"] >= 0.5
+    if flagged:
+        logger.warning("Injection classifier flagged input (score=%.2f)", result["score"])
+
+    return flagged

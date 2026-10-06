@@ -16,6 +16,18 @@ Engineering: Fast Track" course assignment described in [`docs/SPECIFICATION.md`
 | 3. MCP server | Standalone server (streamable-HTTP, bearer-token auth) exposing one tool, `record_reservation`, which appends approved reservations to a file | `mcp_server/server.py` |
 | 4. LangGraph orchestration | `user_interaction` node wraps the chat loop; `admin_approval` (durable `interrupt()`, Postgres-checkpointed) + `record_or_close` form the approval pipeline that calls the MCP tool | `app/ai/graph.py` |
 
+### Logging and tracing
+
+Standard library logging, configured once in `app/logger.py` (level from `LOG_LEVEL`,
+default `INFO`) and used throughout `app/` for the reservation/approval/guardrail lifecycle
+(submitted, approved, rejected, PII redacted, injection blocked, admin auth failures).
+`mcp_server/server.py` configures its own logger the same way, since it's a separate
+deployable that doesn't import `app.config`/`app.logger`.
+
+[LangSmith](https://smith.langchain.com) tracing for the LangChain/LangGraph calls is off by
+default; set `LANGSMITH_TRACING=true` plus `LANGSMITH_API_KEY` (and optionally
+`LANGSMITH_PROJECT`) to enable it - wired up in `app/lifespan.py`.
+
 ### Request flow
 
 1. A user chats via the web UI (`app/templates/chat.html`) → `POST /chat`. The agent answers
@@ -120,6 +132,8 @@ app/
   db/            SQLAlchemy models and repositories (Postgres)
   schemas/       Pydantic request/response models
   static/, templates/   the chat web UI
+  lifespan.py    startup/shutdown: DB/Redis/Milvus/checkpointer setup, LangSmith config
+  logger.py      logging setup (LOG_LEVEL)
 mcp_server/      Stage 3 MCP server (records approved reservations to a file)
 ui/              Stage 2 Streamlit admin console
 migrations/      Alembic migrations
