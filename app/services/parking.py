@@ -14,6 +14,7 @@ from app.db.models import Reservation
 from app.db.repositories.base import AbstractVectorRepository
 from app.db.repositories.parking import ParkingRepository
 from app.db.repositories.reservation import ReservationRepository
+from app.enums import ReservationStatus
 from app.logger import get_logger
 from app.schemas.chat import BookingInput
 
@@ -92,18 +93,20 @@ class ParkingService:
     async def get_pending(self, reservation_id: UUID) -> Reservation | None:
         reservation = await self.reservations.get_by_id(reservation_id)
 
-        if reservation is None or reservation.status != "pending":
+        if reservation is None or reservation.status != ReservationStatus.PENDING:
             return None
 
         return reservation
 
-    async def record_decision(self, reservation_id: UUID, *, approved: bool, note: str | None = None) -> str:
+    async def record_decision(
+        self, reservation_id: UUID, *, approved: bool, note: str | None = None
+    ) -> ReservationStatus | str:
         """Close a pending reservation: on approval, record it through the
-        Stage 3 MCP server and mark it "recorded"; otherwise mark it
-        "rejected". Returns the resulting status."""
+        Stage 3 MCP server and mark it RECORDED; otherwise mark it REJECTED.
+        Returns the resulting status."""
         reservation = await self.reservations.get_by_id(reservation_id)
 
-        if reservation is None or reservation.status != "pending":
+        if reservation is None or reservation.status != ReservationStatus.PENDING:
             status = reservation.status if reservation else "missing"
             logger.warning("record_decision: reservation %s not pending (status=%s), skipping", reservation_id, status)
             return status
@@ -121,13 +124,15 @@ class ParkingService:
                 }
             )
 
-            await self.reservations.update(reservation_id, {"status": "recorded", "approved_at": approved_at})
+            await self.reservations.update(
+                reservation_id, {"status": ReservationStatus.RECORDED, "approved_at": approved_at}
+            )
             logger.info("Reservation %s approved and recorded via MCP", reservation_id)
-            status = "recorded"
+            status = ReservationStatus.RECORDED
         else:
-            await self.reservations.update(reservation_id, {"status": "rejected"})
+            await self.reservations.update(reservation_id, {"status": ReservationStatus.REJECTED})
             logger.info("Reservation %s rejected (note=%s)", reservation_id, note)
-            status = "rejected"
+            status = ReservationStatus.REJECTED
 
         await self.reservations.session.commit()
 

@@ -14,8 +14,8 @@ import sqlalchemy as sa
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from app.ai.graph import CHAT_THREAD_PREFIX
 from app.config import settings
+from app.constants import CHAT_THREAD_PREFIX
 from app.logger import get_logger
 
 logger = get_logger(__name__)

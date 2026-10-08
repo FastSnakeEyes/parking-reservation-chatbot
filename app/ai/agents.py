@@ -26,7 +26,7 @@ from langchain_core.language_models import BaseChatModel
 from pydantic import BaseModel, Field
 
 from app.ai.guardrails import pii_middleware
-from app.ai.prompts import SUMMARY_PROMPT, SYSTEM_PROMPT
+from app.ai.prompts import ADMIN_PROMPT, SUMMARY_PROMPT, SYSTEM_PROMPT
 from app.ai.token_counting import count_tokens
 from app.ai.tools import ChatContext, create_parking_tools
 from app.config import settings
@@ -73,12 +73,6 @@ def build_user_agent(llm: BaseChatModel, summary_llm: BaseChatModel | None = Non
 # --------------------------------------------------------------------------- #
 # Admin agent
 # --------------------------------------------------------------------------- #
-ADMIN_PROMPT = (
-    "You draft short reservation-approval requests for a parking operator's "
-    "administrator to review. State only the facts given below; never invent "
-    "or infer a detail that isn't listed. Two to four plain sentences, no "
-    "greeting or sign-off. Send exactly one message, using notify_admin."
-)
 
 
 class AdminDecision(BaseModel):

@@ -3,6 +3,7 @@ import asyncio
 from fastapi import APIRouter, Depends, HTTPException, Response
 
 from app.ai.tools import ChatContext
+from app.constants import CHAT_REQUEST_TIMEOUT_SECONDS
 from app.dependencies import (
     CookieDependency,
     ParkingGraphDependency,
@@ -14,8 +15,6 @@ from app.helpers import set_chat_cookie
 from app.schemas.chat import ChatRequest, ChatResponse
 
 router = APIRouter(tags=["chat"])
-
-REQUEST_TIMEOUT_SECONDS = 120
 
 
 @router.post(
@@ -46,7 +45,7 @@ async def chat(
     context = ChatContext(service=service)
 
     try:
-        async with asyncio.timeout(REQUEST_TIMEOUT_SECONDS):
+        async with asyncio.timeout(CHAT_REQUEST_TIMEOUT_SECONDS):
             result = await graph.chat(session_id, question, context)
     except TimeoutError as exc:
         raise HTTPException(

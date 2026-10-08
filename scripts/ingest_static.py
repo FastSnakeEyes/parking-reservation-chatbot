@@ -2,7 +2,7 @@ import argparse
 from pathlib import Path
 
 from app.ai.guardrails import get_pii_guard
-from app.config import BASE_DIR
+from app.constants import STATIC_DOCS_DIR
 from app.dependencies import create_vector_repository
 from langchain_core.documents import Document
 from langchain_text_splitters import (
@@ -80,7 +80,7 @@ def main():
     parser.add_argument(
         "--directory",
         type=Path,
-        default=BASE_DIR / "data" / "vilnius-parking-data" / "static",
+        default=STATIC_DOCS_DIR,
     )
 
     args = parser.parse_args()

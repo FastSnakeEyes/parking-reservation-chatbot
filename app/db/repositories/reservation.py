@@ -9,6 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import settings
 from app.db.models import ParkingSpaceType, Reservation
 from app.db.repositories.postgres import PostgresRepository
+from app.enums import ReservationStatus
 from app.schemas.chat import BookingInput
 
 
@@ -19,7 +20,9 @@ class ReservationRepository(PostgresRepository[Reservation]):
 
     async def list_pending(self) -> list[Reservation]:
         rows = await self.session.scalars(
-            sa.select(Reservation).where(Reservation.status == "pending").order_by(Reservation.created_at)
+            sa.select(Reservation)
+            .where(Reservation.status == ReservationStatus.PENDING)
+            .order_by(Reservation.created_at)
         )
         return list(rows.all())
 
@@ -62,7 +65,7 @@ class ReservationRepository(PostgresRepository[Reservation]):
             .values(
                 id=reservation_id,
                 **booking.model_dump(),
-                status="pending",
+                status=ReservationStatus.PENDING,
                 conversation_id=conversation_id,
             )
             .on_conflict_do_nothing(

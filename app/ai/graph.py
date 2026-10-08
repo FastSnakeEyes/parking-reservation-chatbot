@@ -39,22 +39,28 @@ from starlette.concurrency import run_in_threadpool
 from app.ai.agents import build_admin_agent, build_user_agent, notify_admin, parse_admin_reply
 from app.ai.guardrails import is_prompt_injection
 from app.ai.tools import ChatContext
+from app.constants import (
+    ADMIN_LOCK_WAIT_SECONDS,
+    CHAT_LOCK_WAIT_SECONDS,
+    CHAT_THREAD_PREFIX,
+    THREAD_LOCK_TIMEOUT_SECONDS,
+)
+from app.enums import ApprovalDecision, ChatStatus, ReservationStatus
 from app.logger import get_logger
 
 logger = get_logger(__name__)
 
-# Prefix of chat threads in the shared checkpointer (app/ai/chat_cleanup.py finds them by it).
-CHAT_THREAD_PREFIX = "chat:"
 
-
+# Enum fields hold the enum's plain string value: the checkpointer only loads
+# its own registered types back, so enum members must not be persisted.
 class ParkingState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
     draft: NotRequired[dict | None]  # set by prepare_reservation, consumed by `confirm`
     last_reservation_id: NotRequired[str | None]
     admin_message: NotRequired[str | None]  # the admin agent's drafted notification
-    decision: NotRequired[Literal["approved", "rejected"] | None]
+    decision: NotRequired[str | None]  # an ApprovalDecision value
     admin_note: NotRequired[str | None]
-    reservation_status: NotRequired[str | None]  # "pending" | "recorded" | "rejected"
+    reservation_status: NotRequired[str | None]  # a ReservationStatus value
     notice_pending: NotRequired[bool]  # the decision notice is still undelivered
 
 
@@ -157,7 +163,7 @@ def _build_graph(llm: BaseChatModel, checkpointer: BaseCheckpointSaver):
                 ],
                 "draft": None,
                 "last_reservation_id": str(reservation_id),
-                "reservation_status": "pending",
+                "reservation_status": ReservationStatus.PENDING.value,
             },
             goto="request_approval",
         )
@@ -180,34 +186,34 @@ def _build_graph(llm: BaseChatModel, checkpointer: BaseCheckpointSaver):
     # -- Node: wait for the administrator (human-in-the-loop) --------------- #
     def admin_decision(state: ParkingState) -> Command[Literal["record_decision"]]:
         # Pauses here until ParkingGraph.resume() - called by the admin API.
-        # Resume value: {"decision": "approved" | "rejected", "note": str | None},
+        # Resume value: {"decision": an ApprovalDecision value, "note": str | None},
         # or, for a future free-text channel, the administrator's raw reply.
         reply = interrupt({"reservation_id": state["last_reservation_id"], "message": state["admin_message"]})
 
         if isinstance(reply, dict):
-            decision, note = reply["decision"], reply.get("note")
+            decision, note = ApprovalDecision(reply["decision"]), reply.get("note")
         else:
             parsed = parse_admin_reply(llm, str(reply))
-            decision = "approved" if parsed.get("approved") else "rejected"
+            decision = ApprovalDecision.APPROVED if parsed.get("approved") else ApprovalDecision.REJECTED
             note = parsed.get("reason") or None
 
-        return Command(goto="record_decision", update={"decision": decision, "admin_note": note})
+        return Command(goto="record_decision", update={"decision": decision.value, "admin_note": note})
 
     # -- Node: persist the decision, recording approvals through MCP ------- #
     async def record_decision(state: ParkingState, runtime: Runtime[ChatContext]) -> dict:
         reservation_id = state["last_reservation_id"]
         status = await runtime.context.service.record_decision(
             UUID(reservation_id),
-            approved=state["decision"] == "approved",
+            approved=state["decision"] == ApprovalDecision.APPROVED,
             note=state.get("admin_note"),
         )
 
-        outcome = "approved and recorded" if status == "recorded" else "rejected by the administrator"
+        outcome = "approved and recorded" if status == ReservationStatus.RECORDED else "rejected by the administrator"
         notice = f"Update: your reservation {reservation_id} was {outcome}.\nYou can ask your question again."
 
         return {
             "messages": [AIMessage(notice)],
-            "reservation_status": status,
+            "reservation_status": str(status),
             "admin_message": None,
             "decision": None,
             "admin_note": None,
@@ -247,7 +253,9 @@ class ParkingGraph:
 
     def _lock(self, thread_id: str, blocking_timeout: float):
         # Shared by chat turns and admin resumes: both write the same thread.
-        return self.redis.lock(f"parking:graph:{thread_id}:lock", timeout=180, blocking_timeout=blocking_timeout)
+        return self.redis.lock(
+            f"parking:graph:{thread_id}:lock", timeout=THREAD_LOCK_TIMEOUT_SECONDS, blocking_timeout=blocking_timeout
+        )
 
     async def _waiting_for(self, thread_id: str) -> dict | None:
         """The pending admin_decision interrupt's payload, if the thread is paused there."""
@@ -261,10 +269,10 @@ class ParkingGraph:
         """One customer turn. Returns {"status", "answer"}; status is
         "waiting_for_admin" while the conversation is paused for approval."""
         thread_id = self.thread_id(session_id)
-        lock = self._lock(thread_id, blocking_timeout=1)
+        lock = self._lock(thread_id, blocking_timeout=CHAT_LOCK_WAIT_SECONDS)
 
         if not await lock.acquire():
-            return {"status": "complete", "answer": "Your previous message is still being processed."}
+            return {"status": ChatStatus.COMPLETE, "answer": "Your previous message is still being processed."}
 
         try:
             # New input would start a fresh run and abandon the paused one, so
@@ -272,7 +280,7 @@ class ParkingGraph:
             waiting = await self._waiting_for(thread_id)
             if waiting is not None:
                 return {
-                    "status": "waiting_for_admin",
+                    "status": ChatStatus.WAITING_FOR_ADMIN,
                     "answer": f"Your reservation {waiting['reservation_id']} is still awaiting administrator approval.",
                 }
 
@@ -285,14 +293,14 @@ class ParkingGraph:
                 )
             except GraphRecursionError:
                 return {
-                    "status": "complete",
+                    "status": ChatStatus.COMPLETE,
                     "answer": "I could not finish processing that request. Please try a more specific question.",
                 }
         finally:
             await lock.release()
 
         return {
-            "status": "waiting_for_admin" if result.get("__interrupt__") else "complete",
+            "status": ChatStatus.WAITING_FOR_ADMIN if result.get("__interrupt__") else ChatStatus.COMPLETE,
             "answer": _text(result["messages"][-1].content),
         }
 
@@ -306,27 +314,27 @@ class ParkingGraph:
         self,
         thread_id: str,
         reservation_id: UUID,
-        decision: Literal["approved", "rejected"],
+        decision: ApprovalDecision,
         note: str | None,
         context: ChatContext,
-    ) -> str:
+    ) -> ReservationStatus:
         """Resume a conversation paused for the administrator; returns the
         reservation's resulting status. Raises LookupError if that thread is
         not waiting on this reservation."""
-        async with self._lock(thread_id, blocking_timeout=10):
+        async with self._lock(thread_id, blocking_timeout=ADMIN_LOCK_WAIT_SECONDS):
             waiting = await self._waiting_for(thread_id)
             if waiting is None or waiting["reservation_id"] != str(reservation_id):
                 raise LookupError(reservation_id)
 
             logger.info("Resuming conversation for reservation %s with decision=%s", reservation_id, decision)
             result = await self.graph.ainvoke(
-                Command(resume={"decision": decision, "note": note}),
+                Command(resume={"decision": ApprovalDecision(decision).value, "note": note}),
                 config=self._config(thread_id),
                 context=context,
                 durability="exit",
             )
 
-        return result["reservation_status"]
+        return ReservationStatus(result["reservation_status"])
 
 
 def _text(content) -> str:

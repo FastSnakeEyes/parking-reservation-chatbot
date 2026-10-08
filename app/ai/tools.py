@@ -1,6 +1,6 @@
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -15,6 +15,7 @@ from starlette.concurrency import run_in_threadpool
 from app.ai.guardrails import get_pii_guard
 from app.config import settings
 from app.db.models import Parking
+from app.enums import SpaceType
 from app.schemas.chat import BookingInput
 
 if TYPE_CHECKING:
@@ -121,7 +122,7 @@ def create_parking_tools() -> list[BaseTool]:
     @tool(args_schema=BookingInput, return_direct=True)
     async def prepare_reservation(
         parking_id: int,
-        space_type: Literal["standard", "ev"],
+        space_type: SpaceType,
         first_name: str,
         surname: str,
         car_number: str,

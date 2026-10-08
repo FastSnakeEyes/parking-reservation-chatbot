@@ -1,17 +1,14 @@
-from pathlib import Path
-
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 
 from app.api.routers.admin import router as admin_router
 from app.api.routers.chat import router as chat_router
 from app.api.routers.pages import router as pages_router
+from app.constants import STATIC_DIR
 from app.lifespan import lifespan
 from app.logger import setup_logging
 
 setup_logging()
-
-APP_DIR = Path(__file__).resolve().parent
 
 app = FastAPI(
     title="Parking chatbot",
@@ -20,7 +17,7 @@ app = FastAPI(
 
 app.mount(
     "/static",
-    StaticFiles(directory=str(APP_DIR / "static")),
+    StaticFiles(directory=str(STATIC_DIR)),
     name="static",
 )
 

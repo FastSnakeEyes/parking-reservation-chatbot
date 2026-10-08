@@ -13,13 +13,14 @@ from langchain_core.messages.utils import count_tokens_approximately
 from langchain_openai import ChatOpenAI
 
 from app.config import settings
+from app.enums import TokenCounterKind
 
 TokenCounter = Callable[[Sequence[BaseMessage]], int]
 
 
 @lru_cache
 def get_token_counter() -> TokenCounter:
-    if settings.token_counter == "tiktoken":  # noqa: S105 (not a secret)
+    if settings.token_counter == TokenCounterKind.TIKTOKEN:
         counter_model = ChatOpenAI(
             model=settings.llm_model,
             api_key=settings.openai_api_key.get_secret_value(),

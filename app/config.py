@@ -1,20 +1,12 @@
 import os
-from enum import StrEnum
 from pathlib import Path
-from typing import Literal
 
 from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
 
-
-class AppEnvironment(StrEnum):
-    DEVELOPMENT = "development"
-    TESTING = "testing"
-    PRODUCTION = "production"
-
-
-BASE_DIR = Path(__file__).resolve().parent.parent
+from app.constants import BASE_DIR
+from app.enums import AppEnvironment, LogLevel, TokenCounterKind
 
 
 def selected_env_file() -> Path:
@@ -76,7 +68,7 @@ class Settings(BaseSettings):
 
     history_max_tokens: int = Field(default=3000, gt=0)
     history_keep_tokens: int = Field(default=1500, gt=0)
-    token_counter: Literal["tiktoken", "approximate"] = "tiktoken"  # noqa: S105 (not a secret)
+    token_counter: TokenCounterKind = TokenCounterKind.TIKTOKEN
 
     public_contacts: list[str] = Field(default_factory=list)
     use_injection_model: bool = False
@@ -88,7 +80,7 @@ class Settings(BaseSettings):
     mcp_server_url: str = "http://localhost:9000/mcp"
     mcp_api_key: SecretStr = SecretStr("local-dev-only-change-me")
 
-    log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"] = "INFO"
+    log_level: LogLevel = LogLevel.INFO
 
     langsmith_tracing: bool = False
     langsmith_api_key: SecretStr | None = None

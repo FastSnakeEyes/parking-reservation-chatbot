@@ -15,6 +15,7 @@ from app.db.models import (
     WorkingHours,
 )
 from app.db.repositories.postgres import PostgresRepository
+from app.enums import DayType, SpaceType
 
 
 class ParkingRepository(PostgresRepository[Parking]):
@@ -92,10 +93,10 @@ class ParkingRepository(PostgresRepository[Parking]):
         on_date: date,
         space_type: str,
     ) -> dict[str, Any] | None:
-        if space_type not in {"standard", "ev"}:
-            raise ValueError("space_type must be 'standard' or 'ev'")
+        if space_type not in set(SpaceType):
+            raise ValueError(f"space_type must be one of {', '.join(SpaceType)}")
 
-        day_type = "weekend" if on_date.isoweekday() >= 6 else "weekday"
+        day_type = DayType.WEEKEND if on_date.isoweekday() >= 6 else DayType.WEEKDAY
 
         statement = sa.select(
             Price.space_type,

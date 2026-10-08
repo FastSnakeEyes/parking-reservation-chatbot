@@ -1,0 +1,51 @@
+"""Fixed values used across the application, one module per domain,
+re-exported here: `from app.constants import CHAT_THREAD_PREFIX`.
+Unlike app/config.py's settings, these are not configurable per environment."""
+
+from app.constants.chat import (
+    ADMIN_LOCK_WAIT_SECONDS,
+    CHAT_LOCK_WAIT_SECONDS,
+    CHAT_REQUEST_TIMEOUT_SECONDS,
+    CHAT_THREAD_PREFIX,
+    THREAD_LOCK_TIMEOUT_SECONDS,
+)
+from app.constants.guardrails import (
+    CAR_NUMBER_PATTERN,
+    INJECTION_LABEL,
+    INJECTION_SCORE_THRESHOLD,
+    PERSON_PARTS_CACHE_SIZE,
+    PERSON_SCORE_THRESHOLD,
+    PHONE_PATTERN,
+    PII_ENTITIES,
+    PII_LANGUAGE,
+    PII_REDACT_EVERYWHERE,
+    PII_REDACT_TOOL_RESULTS_ONLY,
+)
+from app.constants.llm import LLM_MAX_RETRIES, LLM_TEMPERATURE, LLM_TIMEOUT_SECONDS
+from app.constants.paths import APP_DIR, BASE_DIR, STATIC_DIR, STATIC_DOCS_DIR, TEMPLATES_DIR
+
+__all__ = [
+    "ADMIN_LOCK_WAIT_SECONDS",
+    "APP_DIR",
+    "BASE_DIR",
+    "CAR_NUMBER_PATTERN",
+    "CHAT_LOCK_WAIT_SECONDS",
+    "CHAT_REQUEST_TIMEOUT_SECONDS",
+    "CHAT_THREAD_PREFIX",
+    "INJECTION_LABEL",
+    "INJECTION_SCORE_THRESHOLD",
+    "LLM_MAX_RETRIES",
+    "LLM_TEMPERATURE",
+    "LLM_TIMEOUT_SECONDS",
+    "PERSON_PARTS_CACHE_SIZE",
+    "PERSON_SCORE_THRESHOLD",
+    "PHONE_PATTERN",
+    "PII_ENTITIES",
+    "PII_LANGUAGE",
+    "PII_REDACT_EVERYWHERE",
+    "PII_REDACT_TOOL_RESULTS_ONLY",
+    "STATIC_DIR",
+    "STATIC_DOCS_DIR",
+    "TEMPLATES_DIR",
+    "THREAD_LOCK_TIMEOUT_SECONDS",
+]

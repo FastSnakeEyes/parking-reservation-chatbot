@@ -1,5 +1,4 @@
 from datetime import UTC, datetime
-from typing import Literal
 
 from pydantic import (
     BaseModel,
@@ -7,6 +6,8 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+from app.enums import ChatStatus, SpaceType
 
 
 class ChatRequest(BaseModel):
@@ -22,14 +23,14 @@ class SourceResponse(BaseModel):
 class ChatResponse(BaseModel):
     # "waiting_for_admin" while the conversation is paused for the
     # administrator's approval of a submitted reservation.
-    status: Literal["complete", "waiting_for_admin"] = "complete"
+    status: ChatStatus = ChatStatus.COMPLETE
     answer: str
     sources: list[SourceResponse] = Field(default_factory=list)
 
 
 class BookingInput(BaseModel):
     parking_id: int = Field(gt=0)
-    space_type: Literal["standard", "ev"]
+    space_type: SpaceType
 
     first_name: str = Field(min_length=1, max_length=100)
     surname: str = Field(min_length=1, max_length=100)

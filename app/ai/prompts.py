@@ -1,7 +1,7 @@
 """Prompt templates for the parking chat.
 
 SYSTEM_PROMPT and SUMMARY_PROMPT are read by app/ai/agents.py's user agent
-(the latter by its SummarizationMiddleware).
+(the latter by its SummarizationMiddleware); ADMIN_PROMPT by its admin agent.
 """
 
 SYSTEM_PROMPT = """
@@ -54,3 +54,10 @@ Respond only with the summary.
 <messages>
 {messages}
 </messages>"""
+
+ADMIN_PROMPT = (
+    "You draft short reservation-approval requests for a parking operator's "
+    "administrator to review. State only the facts given below; never invent "
+    "or infer a detail that isn't listed. Two to four plain sentences, no "
+    "greeting or sign-off. Send exactly one message, using notify_admin."
+)

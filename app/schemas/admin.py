@@ -1,8 +1,9 @@
 from datetime import datetime
-from typing import Literal
 from uuid import UUID
 
 from pydantic import BaseModel
+
+from app.enums import ApprovalDecision, ReservationStatus
 
 
 class PendingReservation(BaseModel):
@@ -19,9 +20,9 @@ class PendingReservation(BaseModel):
 
 
 class DecisionRequest(BaseModel):
-    decision: Literal["approved", "rejected"]
+    decision: ApprovalDecision
     note: str | None = None
 
 
 class DecisionResponse(BaseModel):
-    status: str  # the reservation's resulting status: "recorded" | "rejected"
+    status: ReservationStatus  # RECORDED or REJECTED

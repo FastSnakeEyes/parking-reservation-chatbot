@@ -13,6 +13,7 @@ from app.ai.chat_cleanup import run_chat_cleanup
 from app.ai.graph import ParkingGraph
 from app.ai.guardrails import get_pii_guard
 from app.config import settings
+from app.constants import LLM_MAX_RETRIES, LLM_TEMPERATURE, LLM_TIMEOUT_SECONDS
 from app.dependencies import create_vector_repository
 from app.logger import get_logger
 
@@ -86,9 +87,9 @@ async def lifespan(app: FastAPI):
         llm = ChatOpenAI(
             model=settings.llm_model,
             api_key=api_key,
-            temperature=0,
-            timeout=30,
-            max_retries=1,
+            temperature=LLM_TEMPERATURE,
+            timeout=LLM_TIMEOUT_SECONDS,
+            max_retries=LLM_MAX_RETRIES,
             # The user/admin agents' tools share one request-scoped AsyncSession;
             # LangGraph's ToolNode runs multiple tool calls from one turn
             # concurrently (asyncio.gather), which that session can't survive.
