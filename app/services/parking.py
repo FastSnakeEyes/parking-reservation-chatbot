@@ -36,13 +36,13 @@ def _mcp_client() -> MultiServerMCPClient:
 class ParkingService:
     def __init__(
         self,
-        repository: ParkingRepository,
-        reservations: ReservationRepository,
+        parking_repository: ParkingRepository,
+        reservation_repository: ReservationRepository,
         vector_repository: AbstractVectorRepository | None = None,
     ):
         """`vector_repository` is only needed by the user agent's tools."""
-        self.repository = repository
-        self.reservations = reservations
+        self.parking_repository = parking_repository
+        self.reservation_repository = reservation_repository
         self.vector_repository = vector_repository
         self.timezone = ZoneInfo(settings.timezone)
 
@@ -55,7 +55,7 @@ class ParkingService:
         (e.g. its start has passed)."""
         booking = BookingInput.model_validate(draft["data"])
 
-        reservation_id = await self.reservations.submit_pending(
+        reservation_id = await self.reservation_repository.submit_pending(
             reservation_id=UUID(draft["id"]),
             booking=booking,
             conversation_id=conversation_id,
@@ -72,8 +72,8 @@ class ParkingService:
 
     async def approval_facts(self, reservation_id: UUID) -> dict:
         """The facts the admin agent drafts the approval request from."""
-        reservation = await self.reservations.get_by_id(reservation_id)
-        info = await self.repository.get_public_info(
+        reservation = await self.reservation_repository.get_by_id(reservation_id)
+        info = await self.parking_repository.get_public_info(
             parking_id=reservation.parking_id,
             on_date=reservation.starts_at.astimezone(self.timezone).date(),
         )
@@ -88,10 +88,10 @@ class ParkingService:
         }
 
     async def list_pending(self) -> list[Reservation]:
-        return await self.reservations.list_pending()
+        return await self.reservation_repository.list_pending()
 
     async def get_pending(self, reservation_id: UUID) -> Reservation | None:
-        reservation = await self.reservations.get_by_id(reservation_id)
+        reservation = await self.reservation_repository.get_by_id(reservation_id)
 
         if reservation is None or reservation.status != ReservationStatus.PENDING:
             return None
@@ -104,7 +104,7 @@ class ParkingService:
         """Close a pending reservation: on approval, record it through the
         Stage 3 MCP server and mark it RECORDED; otherwise mark it REJECTED.
         Returns the resulting status."""
-        reservation = await self.reservations.get_by_id(reservation_id)
+        reservation = await self.reservation_repository.get_by_id(reservation_id)
 
         if reservation is None or reservation.status != ReservationStatus.PENDING:
             status = reservation.status if reservation else "missing"
@@ -124,16 +124,16 @@ class ParkingService:
                 }
             )
 
-            await self.reservations.update(
+            await self.reservation_repository.update(
                 reservation_id, {"status": ReservationStatus.RECORDED, "approved_at": approved_at}
             )
             logger.info("Reservation %s approved and recorded via MCP", reservation_id)
             status = ReservationStatus.RECORDED
         else:
-            await self.reservations.update(reservation_id, {"status": ReservationStatus.REJECTED})
+            await self.reservation_repository.update(reservation_id, {"status": ReservationStatus.REJECTED})
             logger.info("Reservation %s rejected (note=%s)", reservation_id, note)
             status = ReservationStatus.REJECTED
 
-        await self.reservations.session.commit()
+        await self.reservation_repository.session.commit()
 
         return status

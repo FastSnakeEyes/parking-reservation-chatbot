@@ -156,8 +156,8 @@ def get_parking_service(
     session: SQLSessionDependency,
 ) -> ParkingService:
     return ParkingService(
-        repository=ParkingRepository(session),
-        reservations=ReservationRepository(session),
+        parking_repository=ParkingRepository(session),
+        reservation_repository=ReservationRepository(session),
         vector_repository=request.app.state.vector_repository,
     )
 

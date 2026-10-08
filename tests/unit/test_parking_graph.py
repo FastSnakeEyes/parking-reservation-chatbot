@@ -63,8 +63,8 @@ class FakeService:
     """The ParkingService capabilities the graph and tools call."""
 
     def __init__(self):
-        self.repository = FakeRepository()
-        self.reservations = FakeReservations()
+        self.parking_repository = FakeRepository()
+        self.reservation_repository = FakeReservations()
         self.vector_repository = None
         self.booked: list[tuple[UUID, str]] = []
         self.recorded: list[tuple[UUID, bool]] = []
