@@ -137,7 +137,7 @@ def _build_graph(llm: BaseChatModel, checkpointer: BaseCheckpointSaver):
         config: RunnableConfig,
     ) -> Command[Literal["request_approval", "__end__"]]:
         try:
-            reservation_id = await runtime.context.service.book(
+            reservation_id = await runtime.context.parking_service.book(
                 state["draft"], conversation_id=config["configurable"]["thread_id"]
             )
         except ValueError as exc:
@@ -170,7 +170,7 @@ def _build_graph(llm: BaseChatModel, checkpointer: BaseCheckpointSaver):
 
     # -- Node: the admin agent drafts the approval-request message ---------- #
     async def request_approval(state: ParkingState, runtime: Runtime[ChatContext]) -> dict:
-        facts = await runtime.context.service.approval_facts(UUID(state["last_reservation_id"]))
+        facts = await runtime.context.parking_service.approval_facts(UUID(state["last_reservation_id"]))
         request = "\n".join(f"{key}: {value}" for key, value in facts.items())
         result = await admin_agent.ainvoke({"messages": [HumanMessage(f"New reservation request:\n{request}")]})
 
@@ -202,7 +202,7 @@ def _build_graph(llm: BaseChatModel, checkpointer: BaseCheckpointSaver):
     # -- Node: persist the decision, recording approvals through MCP ------- #
     async def record_decision(state: ParkingState, runtime: Runtime[ChatContext]) -> dict:
         reservation_id = state["last_reservation_id"]
-        status = await runtime.context.service.record_decision(
+        status = await runtime.context.parking_service.record_decision(
             UUID(reservation_id),
             approved=state["decision"] == ApprovalDecision.APPROVED,
             note=state.get("admin_note"),

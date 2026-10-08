@@ -7,7 +7,7 @@ admin_decision interrupt; a decision resumes that conversation's thread.
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from app.ai.tools import ChatContext
 from app.config import settings
@@ -23,7 +23,7 @@ router = APIRouter(prefix="/admin", tags=["admin"])
 async def require_admin(x_admin_key: str = Header(default="")) -> None:
     if x_admin_key != settings.admin_api_key.get_secret_value():
         logger.warning("Rejected an admin request with an invalid X-Admin-Key")
-        raise HTTPException(status_code=401, detail="Invalid admin key")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin key")
 
 
 @router.get(
@@ -32,8 +32,8 @@ async def require_admin(x_admin_key: str = Header(default="")) -> None:
     dependencies=[Depends(require_admin)],
 )
 async def list_pending(
-    service: ParkingServiceDependency,
-    graph: ParkingGraphDependency,
+    parking_service: ParkingServiceDependency,
+    parking_graph: ParkingGraphDependency,
 ) -> list[PendingReservation]:
     return [
         PendingReservation(
@@ -46,9 +46,13 @@ async def list_pending(
             starts_at=reservation.starts_at,
             ends_at=reservation.ends_at,
             created_at=reservation.created_at,
-            message=(await graph.pending_message(reservation.conversation_id) if reservation.conversation_id else None),
+            message=(
+                await parking_graph.pending_message(reservation.conversation_id)
+                if reservation.conversation_id
+                else None
+            ),
         )
-        for reservation in await service.list_pending()
+        for reservation in await parking_service.list_pending()
     ]
 
 
@@ -60,25 +64,27 @@ async def list_pending(
 async def decide(
     reservation_id: UUID,
     payload: DecisionRequest,
-    service: ParkingServiceDependency,
-    graph: ParkingGraphDependency,
+    parking_service: ParkingServiceDependency,
+    parking_graph: ParkingGraphDependency,
 ) -> DecisionResponse:
-    reservation = await service.get_pending(reservation_id)
+    reservation = await parking_service.get_pending(reservation_id)
 
     if reservation is None or reservation.conversation_id is None:
-        raise HTTPException(status_code=404, detail="No pending reservation with that id")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No pending reservation with that id")
 
     logger.info("Admin decision received for reservation %s: %s", reservation_id, payload.decision)
 
     try:
-        status = await graph.resume(
+        reservation_status = await parking_graph.resume(
             reservation.conversation_id,
             reservation_id,
             payload.decision,
             payload.note,
-            ChatContext(service=service),
+            ChatContext(parking_service=parking_service),
         )
     except LookupError as exc:
-        raise HTTPException(status_code=409, detail="That reservation's conversation is not awaiting approval") from exc
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT, detail="That reservation's conversation is not awaiting approval"
+        ) from exc
 
-    return DecisionResponse(status=status)
+    return DecisionResponse(status=reservation_status)

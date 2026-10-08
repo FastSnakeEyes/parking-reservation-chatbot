@@ -38,27 +38,27 @@ def _prepare_call(parking_id: int) -> AIMessage:
 
 
 def _context(session: AsyncSession) -> ChatContext:
-    return ChatContext(service=ParkingService(ParkingRepository(session), ReservationRepository(session)))
+    return ChatContext(parking_service=ParkingService(ParkingRepository(session), ReservationRepository(session)))
 
 
 async def _submit(engine, checkpointer, real_parking, lock_redis) -> tuple[ParkingGraph, Reservation]:
     """Customer turns: review, then confirm - the conversation pauses for the admin."""
-    graph = ParkingGraph(
+    parking_graph = ParkingGraph(
         ScriptedModel(responses=[_prepare_call(real_parking.id), *ADMIN_TURN]), checkpointer, lock_redis
     )
 
     async with AsyncSession(engine, expire_on_commit=False) as session:
-        review = await graph.chat(SESSION, "book it", _context(session))
+        review = await parking_graph.chat(SESSION, "book it", _context(session))
         assert review["answer"].startswith("Please review your reservation request:")
 
-        confirmed = await graph.chat(SESSION, "confirm", _context(session))
+        confirmed = await parking_graph.chat(SESSION, "confirm", _context(session))
         assert confirmed["status"] == "waiting_for_admin"
 
         reservations = await ReservationRepository(session).list_pending()
-        reservation = next(r for r in reservations if r.conversation_id == graph.thread_id(SESSION))
+        reservation = next(r for r in reservations if r.conversation_id == parking_graph.thread_id(SESSION))
 
-    assert await graph.pending_message(reservation.conversation_id) == ADMIN_DRAFT_MESSAGE
-    return graph, reservation
+    assert await parking_graph.pending_message(reservation.conversation_id) == ADMIN_DRAFT_MESSAGE
+    return parking_graph, reservation
 
 
 @pytest.mark.integration
@@ -66,11 +66,13 @@ async def _submit(engine, checkpointer, real_parking, lock_redis) -> tuple[Parki
 async def test_approval_records_reservation_via_mcp_server(
     engine, checkpointer, real_parking, mcp_settings, lock_redis
 ):
-    graph, reservation = await _submit(engine, checkpointer, real_parking, lock_redis)
+    parking_graph, reservation = await _submit(engine, checkpointer, real_parking, lock_redis)
 
     # Admin request: its own DB session, as in the app.
     async with AsyncSession(engine, expire_on_commit=False) as session:
-        status = await graph.resume(reservation.conversation_id, reservation.id, "approved", None, _context(session))
+        status = await parking_graph.resume(
+            reservation.conversation_id, reservation.id, "approved", None, _context(session)
+        )
         stored = await session.get(Reservation, reservation.id, populate_existing=True)
 
     assert status == "recorded"
@@ -81,7 +83,7 @@ async def test_approval_records_reservation_via_mcp_server(
     assert "Jane Doe | E2E-123" in contents
 
     async with AsyncSession(engine, expire_on_commit=False) as session:
-        notice = await graph.chat(SESSION, "any news?", _context(session))
+        notice = await parking_graph.chat(SESSION, "any news?", _context(session))
 
     assert notice["answer"].startswith(f"Update: your reservation {reservation.id} was approved")
 
@@ -91,12 +93,14 @@ async def test_approval_records_reservation_via_mcp_server(
 async def test_rejection_closes_without_calling_mcp_server(
     engine, checkpointer, real_parking, mcp_settings, lock_redis
 ):
-    graph, reservation = await _submit(engine, checkpointer, real_parking, lock_redis)
+    parking_graph, reservation = await _submit(engine, checkpointer, real_parking, lock_redis)
 
     before = mcp_settings["file"].read_text() if mcp_settings["file"].exists() else ""
 
     async with AsyncSession(engine, expire_on_commit=False) as session:
-        status = await graph.resume(reservation.conversation_id, reservation.id, "rejected", None, _context(session))
+        status = await parking_graph.resume(
+            reservation.conversation_id, reservation.id, "rejected", None, _context(session)
+        )
         stored = await session.get(Reservation, reservation.id, populate_existing=True)
 
     assert status == "rejected"

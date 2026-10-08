@@ -1,6 +1,6 @@
 import asyncio
 
-from fastapi import APIRouter, Depends, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 
 from app.ai.tools import ChatContext
 from app.constants import CHAT_REQUEST_TIMEOUT_SECONDS
@@ -29,8 +29,8 @@ async def chat(
     payload: ChatRequest,
     response: Response,
     session_id: CookieDependency,
-    graph: ParkingGraphDependency,
-    service: ParkingServiceDependency,
+    parking_graph: ParkingGraphDependency,
+    parking_service: ParkingServiceDependency,
 ) -> ChatResponse:
     response.headers["Cache-Control"] = "no-store"
 
@@ -38,18 +38,18 @@ async def chat(
 
     if not question:
         raise HTTPException(
-            status_code=422,
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
             detail="Question must not be blank",
         )
 
-    context = ChatContext(service=service)
+    context = ChatContext(parking_service=parking_service)
 
     try:
         async with asyncio.timeout(CHAT_REQUEST_TIMEOUT_SECONDS):
-            result = await graph.chat(session_id, question, context)
+            result = await parking_graph.chat(session_id, question, context)
     except TimeoutError as exc:
         raise HTTPException(
-            status_code=504,
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
             detail="Chat processing timed out. Please retry.",
             headers={"Cache-Control": "no-store"},
         ) from exc

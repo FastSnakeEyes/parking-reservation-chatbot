@@ -30,7 +30,7 @@ class ChatContext:
     request - the ParkingService over the request-scoped DB session, and the
     sources cited in this turn's answer - arrives here through runtime.context."""
 
-    service: "ParkingService"
+    parking_service: "ParkingService"
     sources: list[dict] = field(default_factory=list)
 
 
@@ -41,7 +41,7 @@ def create_parking_tools() -> list[BaseTool]:
     async def list_parkings(runtime: ToolRuntime[ChatContext]) -> dict:
         """List public parking IDs, names, and districts."""
 
-        result = await runtime.context.service.repository.session.execute(
+        result = await runtime.context.parking_service.repository.session.execute(
             sa.select(
                 Parking.id,
                 Parking.name,
@@ -64,7 +64,7 @@ def create_parking_tools() -> list[BaseTool]:
 
         requested_date = on_date or datetime.now(local_timezone).date()
 
-        info = await runtime.context.service.repository.get_public_info(
+        info = await runtime.context.parking_service.repository.get_public_info(
             parking_id=parking_id,
             on_date=requested_date,
         )
@@ -87,7 +87,7 @@ def create_parking_tools() -> list[BaseTool]:
 
         sources = runtime.context.sources
         documents = await run_in_threadpool(
-            runtime.context.service.vector_repository.search,
+            runtime.context.parking_service.vector_repository.search,
             query=query,
             k=settings.retriever_k,
         )
@@ -145,9 +145,9 @@ def create_parking_tools() -> list[BaseTool]:
             ends_at=ends_at,
         )
 
-        await runtime.context.service.reservations.validate_request(booking)
+        await runtime.context.parking_service.reservations.validate_request(booking)
 
-        info = await runtime.context.service.repository.get_public_info(
+        info = await runtime.context.parking_service.repository.get_public_info(
             parking_id=parking_id,
             on_date=booking.starts_at.astimezone(local_timezone).date(),
         )

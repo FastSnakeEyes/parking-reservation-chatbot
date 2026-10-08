@@ -3,7 +3,7 @@ from collections.abc import AsyncIterator
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, Request
+from fastapi import Depends, HTTPException, Request, status
 from langchain_openai import OpenAIEmbeddings
 from pymilvus import MilvusClient
 from redis.asyncio import Redis
@@ -79,7 +79,7 @@ async def require_cookie(request: Request) -> str:
 
     if not cookie_id:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Missing cookie: {settings.cookie_name}",
         )
 
@@ -87,7 +87,7 @@ async def require_cookie(request: Request) -> str:
         return str(UUID(cookie_id))
     except ValueError as exc:
         raise HTTPException(
-            status_code=400,
+            status_code=status.HTTP_400_BAD_REQUEST,
             detail="Invalid chat cookie. Reload the homepage.",
         ) from exc
 
@@ -113,7 +113,7 @@ async def cookie_rate_limit(
     if count > settings.rate_limit_times:
         ttl = await redis_conn.ttl(key)
         raise HTTPException(
-            status_code=429,
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail="Too many requests. Please wait a moment.",
             headers={"Retry-After": str(max(ttl, 1))},
         )
@@ -141,7 +141,7 @@ async def global_user_limit(
 
     if not is_active and active_count >= settings.max_active_users:
         raise HTTPException(
-            status_code=429,
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail=f"Too many active users (max {settings.max_active_users})",
             headers={"Retry-After": str(settings.active_user_ttl)},
         )

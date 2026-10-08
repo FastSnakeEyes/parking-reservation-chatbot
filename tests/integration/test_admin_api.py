@@ -26,10 +26,10 @@ class StubGraph:
         return "recorded" if decision == "approved" else "rejected"
 
 
-def build_test_app(db_session, graph) -> FastAPI:
+def build_test_app(db_session, parking_graph) -> FastAPI:
     app = FastAPI()
     app.include_router(admin_router)
-    app.state.parking_graph = graph
+    app.state.parking_graph = parking_graph
     app.state.vector_repository = None  # only the user agent's tools need it
 
     async def override_session():
@@ -105,8 +105,8 @@ async def test_decision_resumes_the_reservations_conversation(db_session, sample
     reservation_id = uuid4()
     await ReservationRepository(db_session).submit_pending(reservation_id, _booking(sample_parking.id), THREAD_ID)
 
-    graph = StubGraph()
-    app = build_test_app(db_session, graph)
+    parking_graph = StubGraph()
+    app = build_test_app(db_session, parking_graph)
 
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         response = await client.post(
@@ -117,4 +117,4 @@ async def test_decision_resumes_the_reservations_conversation(db_session, sample
 
     assert response.status_code == 200
     assert response.json() == {"status": "recorded"}
-    assert graph.resumed == [(THREAD_ID, reservation_id, "approved", None)]
+    assert parking_graph.resumed == [(THREAD_ID, reservation_id, "approved", None)]
