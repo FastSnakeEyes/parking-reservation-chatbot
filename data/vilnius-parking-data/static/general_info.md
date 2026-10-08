@@ -15,7 +15,7 @@ VilniusPark (UAB "VilniusPark") is a parking operator in Vilnius, Lithuania. It 
 
 ## Contact
 - Customer support phone: +370 5 200 0000 (daily 08:00–20:00)
-- Email: support@vilniuspark.example
+- Email: info@vilpark.lt
 - Emergency line at each car park: intercom at every barrier and payment machine, available 24/7
 
 ## Payment

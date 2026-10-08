@@ -12,6 +12,7 @@ from app.ai.graph import ApprovalPipeline
 from app.db.models import Reservation
 from app.db.repositories.reservation import ReservationRepository
 from app.schemas.chat import BookingInput
+from tests.e2e.conftest import ADMIN_DRAFT_MESSAGE
 
 FUTURE_START = datetime.now(UTC) + timedelta(days=1)
 FUTURE_END = FUTURE_START + timedelta(hours=3)
@@ -41,8 +42,8 @@ async def test_approval_records_reservation_via_mcp_server(
     booking = _booking(real_parking.id)
     await ReservationRepository(real_session).submit_pending(reservation_id, booking)
 
-    await approval_pipeline.start(reservation_id, message="Please approve Jane Doe's reservation.")
-    assert await approval_pipeline.pending_message(reservation_id) == "Please approve Jane Doe's reservation."
+    await approval_pipeline.start(reservation_id, {"Customer": "Jane Doe", "Car number": "E2E-123"})
+    assert await approval_pipeline.pending_message(reservation_id) == ADMIN_DRAFT_MESSAGE
 
     await approval_pipeline.resume(reservation_id, "approved")
 
@@ -69,7 +70,7 @@ async def test_rejection_closes_without_calling_mcp_server(
 
     before = mcp_test_server["file"].read_text() if mcp_test_server["file"].exists() else ""
 
-    await approval_pipeline.start(reservation_id, message="Please approve Jane Doe's reservation.")
+    await approval_pipeline.start(reservation_id, {"Customer": "Jane Doe", "Car number": "E2E-123"})
     await approval_pipeline.resume(reservation_id, "rejected")
 
     reservation = await real_session.get(Reservation, reservation_id, populate_existing=True)

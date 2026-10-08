@@ -68,6 +68,7 @@ class Settings(BaseSettings):
 
     cookie_name: str = "parking_chat"
     cookie_ttl: int = Field(default=1800, gt=0)
+    chat_cleanup_interval: int = Field(default=600, gt=0)  # seconds between idle chat thread sweeps
     max_active_users: int = Field(default=100, gt=0)
     active_user_ttl: int = Field(default=60, gt=0)
     rate_limit_times: int = Field(default=2, gt=0)
@@ -75,8 +76,6 @@ class Settings(BaseSettings):
 
     history_max_tokens: int = Field(default=3000, gt=0)
     history_keep_tokens: int = Field(default=1500, gt=0)
-    history_max_stored: int = Field(default=40, gt=0)
-    max_tool_rounds: int = Field(default=8, gt=0)
     token_counter: Literal["tiktoken", "approximate"] = "tiktoken"  # noqa: S105 (not a secret)
 
     public_contacts: list[str] = Field(default_factory=list)

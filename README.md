@@ -10,9 +10,9 @@ Engineering: Fast Track" course assignment described in [`docs/SPECIFICATION.md`
 
 | Stage | What it is | Where |
 | --- | --- | --- |
-| 1. RAG chatbot | LangChain tool-calling agent over a hybrid store: Milvus for static docs (general info, rules, booking process, per-car-park pages), Postgres for dynamic data (hours, prices, capacity, reservations) | `app/ai/`, `app/db/` |
-| 1. Guardrails | Presidio+spaCy PII detection/redaction on search queries and answers; optional transformer-based prompt-injection screening | `app/ai/guardrails.py` |
-| 2. Human-in-the-loop admin agent | A LangChain chain drafts the approval-request message; a REST API + Streamlit console is the administrator's side of the exchange | `app/ai/admin_agent.py`, `app/api/routers/admin.py`, `ui/admin_app.py` |
+| 1. RAG chatbot | `langchain.agents.create_agent` user agent over a hybrid store: Milvus for static docs (general info, rules, booking process, per-car-park pages), Postgres for dynamic data (hours, prices, capacity, reservations) | `app/ai/agents.py`, `app/ai/tools.py`, `app/db/` |
+| 1. Guardrails | PIIMiddleware redacts the agent's own output; Presidio+spaCy additionally screens search queries and blocks PII from reaching the vector store; optional transformer-based prompt-injection screening | `app/ai/agents.py`, `app/ai/guardrails.py` |
+| 2. Human-in-the-loop admin agent | A second `create_agent` drafts the approval-request message; a REST API + Streamlit console is the administrator's side of the exchange | `app/ai/agents.py`, `app/api/routers/admin.py`, `ui/admin_app.py` |
 | 3. MCP server | Standalone server (streamable-HTTP, bearer-token auth) exposing one tool, `record_reservation`, which appends approved reservations to a file | `mcp_server/server.py` |
 | 4. LangGraph orchestration | `user_interaction` node wraps the chat loop; `admin_approval` (durable `interrupt()`, Postgres-checkpointed) + `record_or_close` form the approval pipeline that calls the MCP tool | `app/ai/graph.py` |
 
@@ -126,8 +126,9 @@ default; set `LANGSMITH_TRACING=true` plus `LANGSMITH_API_KEY` (and optionally
 
 ```
 app/
-  ai/            chat agent, LangGraph orchestration, admin agent, guardrails, tools,
-                 Redis-backed chat history/memory/session store
+  ai/            chat agent (memory via the Postgres checkpointer + summarization
+                 middleware), session middleware, LangGraph orchestration, admin agent,
+                 guardrails, tools
   api/routers/   /chat, /admin REST endpoints, and pages.py (/, /admin, /health)
   db/            SQLAlchemy models and repositories (Postgres)
   schemas/       Pydantic request/response models

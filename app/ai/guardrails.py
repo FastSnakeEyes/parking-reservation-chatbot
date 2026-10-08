@@ -46,6 +46,14 @@ class PIIGuard:
         )
         self._anonymizer = AnonymizerEngine()
 
+    @property
+    def analyzer(self) -> AnalyzerEngine:
+        """Exposed so other PII detectors (e.g. app/ai/agents.py's PERSON
+        detection) reuse this already-configured engine instead of building
+        a second one with Presidio's default (much larger, not-installed)
+        spaCy model."""
+        return self._analyzer
+
     def analyze(
         self,
         text: str,

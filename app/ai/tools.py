@@ -1,12 +1,15 @@
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import Literal
+from typing import TYPE_CHECKING, Literal
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import sqlalchemy as sa
 from fastapi.encoders import jsonable_encoder
+from langchain.tools import ToolRuntime
+from langchain_core.messages import ToolMessage
 from langchain_core.tools import BaseTool, tool
+from langgraph.types import Command
 from starlette.concurrency import run_in_threadpool
 
 from app.ai.guardrails import get_pii_guard
@@ -16,27 +19,33 @@ from app.db.repositories.base import AbstractSQLRepository, AbstractVectorReposi
 from app.db.repositories.parking import ParkingRepository
 from app.schemas.chat import BookingInput
 
+if TYPE_CHECKING:
+    from app.ai.graph import ApprovalPipeline
+
 
 @dataclass
-class ToolContext:
+class ChatContext:
+    """Per-request dependencies of the user agent (its `context_schema`).
+
+    The agent itself is built once at startup; everything bound to one
+    request - the request-scoped DB session's repositories, and the sources
+    cited in this turn's answer - arrives here through runtime.context."""
+
+    repository: ParkingRepository
+    vector_repository: AbstractVectorRepository
+    reservations: AbstractSQLRepository
+    approval_pipeline: "ApprovalPipeline"
     sources: list[dict] = field(default_factory=list)
-    draft: dict | None = None
-    review: str | None = None
 
 
-def create_parking_tools(
-    repository: ParkingRepository,
-    vector_repository: AbstractVectorRepository,
-    reservations: AbstractSQLRepository,
-    context: ToolContext,
-) -> list[BaseTool]:
+def create_parking_tools() -> list[BaseTool]:
     local_timezone = ZoneInfo(settings.timezone)
 
     @tool
-    async def list_parkings() -> dict:
+    async def list_parkings(runtime: ToolRuntime[ChatContext]) -> dict:
         """List public parking IDs, names, and districts."""
 
-        result = await repository.session.execute(
+        result = await runtime.context.repository.session.execute(
             sa.select(
                 Parking.id,
                 Parking.name,
@@ -49,6 +58,7 @@ def create_parking_tools(
     @tool
     async def get_parking_info(
         parking_id: int,
+        runtime: ToolRuntime[ChatContext],
         on_date: date | None = None,
     ) -> dict:
         """Read date-specific prices, hours, capacities and restrictions.
@@ -58,7 +68,7 @@ def create_parking_tools(
 
         requested_date = on_date or datetime.now(local_timezone).date()
 
-        info = await repository.get_public_info(
+        info = await runtime.context.repository.get_public_info(
             parking_id=parking_id,
             on_date=requested_date,
         )
@@ -69,7 +79,7 @@ def create_parking_tools(
         return jsonable_encoder(info)
 
     @tool
-    async def search_public_rules(query: str) -> dict:
+    async def search_public_rules(query: str, runtime: ToolRuntime[ChatContext]) -> dict:
         """Search static public rules and parking information.
 
         Use public topic keywords only. Do not include customer
@@ -79,8 +89,9 @@ def create_parking_tools(
         if await run_in_threadpool(get_pii_guard().contains_pii, query):
             return {"error": ("Query must not contain personal details. Rephrase using public topic keywords only.")}
 
+        sources = runtime.context.sources
         documents = await run_in_threadpool(
-            vector_repository.search,
+            runtime.context.vector_repository.search,
             query=query,
             k=settings.retriever_k,
         )
@@ -88,10 +99,10 @@ def create_parking_tools(
         results = []
 
         for document in documents:
-            label = len(context.sources) + 1
+            label = len(sources) + 1
             source = document.metadata.get("source", "unknown")
 
-            context.sources.append(
+            sources.append(
                 {
                     "label": label,
                     "source": source,
@@ -109,7 +120,10 @@ def create_parking_tools(
 
         return {"documents": results}
 
-    @tool(args_schema=BookingInput)
+    # return_direct: the review below is the turn's final answer, shown
+    # verbatim (exact price/hours/availability) rather than trusting the
+    # model's retelling of it.
+    @tool(args_schema=BookingInput, return_direct=True)
     async def prepare_reservation(
         parking_id: int,
         space_type: Literal["standard", "ev"],
@@ -118,7 +132,8 @@ def create_parking_tools(
         car_number: str,
         starts_at: datetime,
         ends_at: datetime,
-    ) -> dict:
+        runtime: ToolRuntime[ChatContext],
+    ) -> Command | dict:
         """Validate complete booking details and prepare a review.
 
         Does not save or approve a reservation.
@@ -134,9 +149,9 @@ def create_parking_tools(
             ends_at=ends_at,
         )
 
-        await reservations.validate_request(booking)
+        await runtime.context.reservations.validate_request(booking)
 
-        info = await repository.get_public_info(
+        info = await runtime.context.repository.get_public_info(
             parking_id=parking_id,
             on_date=booking.starts_at.astimezone(local_timezone).date(),
         )
@@ -163,12 +178,12 @@ def create_parking_tools(
         else:
             schedule = f"{hours['open_time']}–{hours['close_time']}"
 
-        context.draft = {
+        draft = {
             "id": str(uuid4()),
             "data": booking.model_dump(mode="json"),
         }
 
-        context.review = (
+        review = (
             "Please review your reservation request:\n"
             f"Parking: {info['name']}\n"
             f"Space type: {space_type}\n"
@@ -186,7 +201,12 @@ def create_parking_tools(
             "or describe a correction."
         )
 
-        return {"review_ready": True}
+        return Command(
+            update={
+                "draft": draft,
+                "messages": [ToolMessage(content=review, tool_call_id=runtime.tool_call_id)],
+            }
+        )
 
     return [
         list_parkings,

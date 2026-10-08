@@ -1,6 +1,7 @@
 import argparse
 from pathlib import Path
 
+from app.ai.guardrails import get_pii_guard
 from app.config import BASE_DIR
 from app.dependencies import create_vector_repository
 from langchain_core.documents import Document
@@ -54,6 +55,25 @@ class MarkdownLoader:
         return documents
 
 
+def redact_documents(documents: list[Document]) -> None:
+    """Mask PII in place before it ever reaches Milvus - defense in depth
+    beyond the query-time and answer-time redaction in app/ai/guardrails.py,
+    so even a raw store dump stays clean. settings.public_contacts is
+    still honored, so the operator's own published phone/email survives."""
+    guard = get_pii_guard()
+    redacted_count = 0
+
+    for document in documents:
+        redacted = guard.redact(document.page_content)
+
+        if redacted != document.page_content:
+            redacted_count += 1
+            document.page_content = redacted
+
+    if redacted_count:
+        print(f"Redacted PII in {redacted_count} of {len(documents)} chunks")
+
+
 def main():
     parser = argparse.ArgumentParser(description="Load public static Markdown into Milvus")
 
@@ -68,6 +88,8 @@ def main():
 
     if not documents:
         raise ValueError("No Markdown content found")
+
+    redact_documents(documents)
 
     repository = create_vector_repository()
 

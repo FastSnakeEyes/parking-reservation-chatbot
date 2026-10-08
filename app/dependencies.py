@@ -156,7 +156,7 @@ def get_chat_service(
         session=session,
         redis=request.app.state.redis,
         vector_repository=request.app.state.vector_repository,
-        llm=request.app.state.llm,
+        agent=request.app.state.chat_agent,
         approval_pipeline=request.app.state.approval_pipeline,
     )
 

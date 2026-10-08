@@ -1,16 +1,8 @@
-"""Prompt templates for the parking chat (LangChain classes).
+"""Prompt templates for the parking chat.
 
-SYSTEM_PROMPT stays in app/ai/prompts.py; this module builds the chat and summary prompts.
+SYSTEM_PROMPT and SUMMARY_PROMPT are read by app/ai/agents.py's user agent
+(the latter by its SummarizationMiddleware).
 """
-
-from operator import itemgetter
-
-from langchain_core.messages import SystemMessage, trim_messages
-from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.runnables import RunnablePassthrough
-
-from app.ai.token_counting import count_tokens
-from app.config import settings
 
 SYSTEM_PROMPT = """
 You are a parking information and reservation assistant.
@@ -51,39 +43,14 @@ Never retrieve another customer's reservation.
 The user can type cancel to clear the conversation.
 """
 
-CHAT_PROMPT = ChatPromptTemplate.from_messages(
-    [
-        # Message object, so {braces} inside SYSTEM_PROMPT are not treated as template variables.
-        # Static content first -> stable prefix for OpenAI prompt caching.
-        SystemMessage(content=SYSTEM_PROMPT),
-        MessagesPlaceholder("summary", optional=True),  # [] until older turns get summarized
-        MessagesPlaceholder("history"),  # recent turns, verbatim
-        ("system", "Current local date/time: {now} ({timezone})"),
-        ("human", "{question}"),
-    ]
-)
+# SummarizationMiddleware's prompt: {messages} is the older part of the
+# conversation being folded into the summary.
+SUMMARY_PROMPT = """You maintain a running summary of a conversation between a user and a parking
+reservation assistant. Summarize the messages below, including any earlier summary
+among them. Keep: what the user asked, details they gave (name, car plate, parking,
+dates), decisions made and open questions. Drop small talk. At most 150 words.
+Respond only with the summary.
 
-# Safety net: even if the summary step lags behind, never send more than this.
-HISTORY_TRIMMER = trim_messages(
-    max_tokens=settings.history_max_tokens,
-    strategy="last",
-    token_counter=count_tokens,
-    start_on="human",
-    include_system=False,
-)
-
-# {"summary", "history", "question", "now", "timezone"} -> ready-to-send prompt
-BUILD_PROMPT = RunnablePassthrough.assign(history=itemgetter("history") | HISTORY_TRIMMER) | CHAT_PROMPT
-
-SUMMARY_PROMPT = ChatPromptTemplate.from_messages(
-    [
-        (
-            "system",
-            "You maintain a running summary of a conversation between a user and a parking "
-            "reservation assistant. Update the existing summary with the new messages. "
-            "Keep: what the user asked, details they gave (name, car plate, parking, dates), "
-            "decisions made and open questions. Drop small talk. At most 150 words.",
-        ),
-        ("human", "Current summary:\n{summary}\n\nNew messages:\n{new_lines}\n\nUpdated summary:"),
-    ]
-)
+<messages>
+{messages}
+</messages>"""

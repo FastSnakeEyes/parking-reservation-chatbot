@@ -1,6 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Response
 
-from app.ai.graph import run_chat_turn
 from app.dependencies import (
     ChatServiceDependency,
     CookieDependency,
@@ -38,11 +37,7 @@ async def chat(
         )
 
     try:
-        result = await run_chat_turn(
-            chatbot,
-            session_id=session_id,
-            question=question,
-        )
+        result = await chatbot.ask(session_id, question)
     except TimeoutError as exc:
         raise HTTPException(
             status_code=504,

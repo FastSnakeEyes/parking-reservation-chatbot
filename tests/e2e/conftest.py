@@ -15,13 +15,41 @@ from uuid import uuid4
 import httpx
 import pytest
 import pytest_asyncio
+from app.ai.agents import notify_admin
 from app.ai.graph import ApprovalPipeline
 from app.config import settings
 from app.db.models import Parking, ParkingSpaceType, Price, WorkingHours
+from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
+from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 MCP_TEST_PORT = 9401
+
+ADMIN_DRAFT_MESSAGE = "Please approve Jane Doe's reservation."
+
+
+class FakeAdminModel(FakeMessagesListChatModel):
+    """FakeMessagesListChatModel has no bind_tools - create_agent calls it
+    unconditionally, so a fake model used with it needs a no-op override.
+    Deterministically drafts the same notify_admin call every time, so
+    e2e tests don't depend on (or pay for) a real OpenAI call."""
+
+    def __init__(self):
+        super().__init__(
+            responses=[
+                AIMessage(
+                    content="",
+                    tool_calls=[{"name": notify_admin.name, "args": {"text": ADMIN_DRAFT_MESSAGE}, "id": "call_1"}],
+                ),
+                # create_agent calls the model again after the tool runs;
+                # without a second, tool-call-free response the loop never ends.
+                AIMessage(content="Done, I've notified the administrator."),
+            ]
+        )
+
+    def bind_tools(self, tools, *, tool_choice=None, **kwargs):
+        return self
 
 
 @pytest.fixture(scope="session")
@@ -68,7 +96,7 @@ async def approval_pipeline(engine, mcp_test_server, monkeypatch) -> ApprovalPip
     monkeypatch.setattr(settings, "mcp_server_url", mcp_test_server["url"])
     monkeypatch.setattr(settings, "mcp_api_key", SecretStr(mcp_test_server["api_key"]))
 
-    return ApprovalPipeline(engine, InMemorySaver())
+    return ApprovalPipeline(FakeAdminModel(), engine, InMemorySaver())
 
 
 @pytest_asyncio.fixture

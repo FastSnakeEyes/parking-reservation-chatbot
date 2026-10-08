@@ -61,3 +61,7 @@ storage/*
 
 # Stage 3 MCP server output (copied out of the mcp-server container for inspection)
 approved_reservations.txt
+
+# Local scratch files, kept on disk but never committed
+/test.py
+/text.txt
