@@ -33,17 +33,3 @@ async def test_parse_admin_reply_rejected_with_reason():
     decision = parse_admin_reply(llm, "no, the lot is closed today")
 
     assert decision == {"approved": False, "reason": "lot is closed"}
-
-
-def test_public_contacts_are_not_redacted(monkeypatch):
-    from app.ai.agents import _detect_phone, _skip_public_contacts, detect_email
-    from app.config import settings
-
-    monkeypatch.setattr(settings, "public_contacts", ["+370 5 200 0000", "info@vilpark.lt"])
-    text = "Support: +370 5 200 0000, info@vilpark.lt. Customer: +370 612 34567, jonas@gmail.com"
-
-    phones = [m["value"] for m in _skip_public_contacts(_detect_phone)(text)]
-    emails = [m["value"] for m in _skip_public_contacts(detect_email)(text)]
-
-    assert phones == ["+370 612 34567"]
-    assert emails == ["jonas@gmail.com"]

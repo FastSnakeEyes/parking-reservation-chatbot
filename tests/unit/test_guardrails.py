@@ -53,3 +53,17 @@ def test_is_prompt_injection_disabled_by_default():
 
 def test_is_prompt_injection_empty_text():
     assert is_prompt_injection("") is False
+
+
+def test_public_contacts_are_not_redacted(monkeypatch):
+    from app.ai.guardrails import _detect_phone, _skip_public_contacts, detect_email
+    from app.config import settings
+
+    monkeypatch.setattr(settings, "public_contacts", ["+370 5 200 0000", "info@vilpark.lt"])
+    text = "Support: +370 5 200 0000, info@vilpark.lt. Customer: +370 612 34567, jonas@gmail.com"
+
+    phones = [m["value"] for m in _skip_public_contacts(_detect_phone)(text)]
+    emails = [m["value"] for m in _skip_public_contacts(detect_email)(text)]
+
+    assert phones == ["+370 612 34567"]
+    assert emails == ["jonas@gmail.com"]
