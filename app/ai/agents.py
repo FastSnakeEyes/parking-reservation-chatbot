@@ -1,42 +1,35 @@
-"""The two agents in this app, built with langchain.agents.create_agent:
+"""The two agents in this app, built with langchain.agents.create_agent and
+both run as nodes of ParkingGraph (app/ai/graph.py), which owns the
+conversation's persistence and workflow:
 
 1. The user-facing agent (`build_user_agent`) answers questions and
    collects reservation details. Its tools (app/ai/tools.py) talk to the
    real repositories/vector store; `prepare_reservation` returns directly,
    so its review (exact price, hours, availability) is the answer verbatim
-   rather than the model's retelling. Memory, summarization, the
-   cancel/confirm commands and the injection guard all live in this
-   agent's checkpointer and middleware (app/ai/middleware.py).
+   rather than the model's retelling. PII redaction and history
+   summarization are its middleware.
 2. The admin agent (`build_admin_agent`) drafts the administrator's
    approval-request message from a reservation's details via its
-   `notify_admin` tool. Stage 2's actual approve/reject exchange still
-   happens over the REST API (app/api/routers/admin.py) and the
-   Streamlit console (ui/admin_app.py) - `notify_admin` only produces the
-   text shown there.
-
-app/ai/graph.py's `ApprovalPipeline` is the LangGraph graph that
-orchestrates agent 2: its `request_approval` node runs this agent and
-extracts the drafted text, `admin_decision` pauses for the
-administrator's decision (interrupt), then `record_reservation` calls
-the Stage 3 MCP tool on approval.
+   `notify_admin` tool - the text shown in the admin console
+   (app/api/routers/admin.py, ui/admin_app.py) while the conversation
+   waits at ParkingGraph's `admin_decision` interrupt.
 """
 
 import re
 from collections.abc import Callable
 from datetime import datetime
 from functools import lru_cache
+from typing import NotRequired
 from zoneinfo import ZoneInfo
 
-from langchain.agents import create_agent
+from langchain.agents import AgentState, create_agent
 from langchain.agents.middleware import PIIMiddleware, SummarizationMiddleware, dynamic_prompt
 from langchain.agents.middleware._redaction import PIIMatch, detect_email
 from langchain.tools import tool
 from langchain_core.language_models import BaseChatModel
-from langgraph.checkpoint.base import BaseCheckpointSaver
 from pydantic import BaseModel, Field
 
 from app.ai.guardrails import get_pii_guard
-from app.ai.middleware import ChatState, session_commands
 from app.ai.prompts import SUMMARY_PROMPT, SYSTEM_PROMPT
 from app.ai.token_counting import count_tokens
 from app.ai.tools import ChatContext, create_parking_tools
@@ -133,11 +126,15 @@ def _pii_guardrails() -> list[PIIMiddleware]:
     ]
 
 
-def build_user_agent(llm: BaseChatModel, checkpointer: BaseCheckpointSaver, summary_llm: BaseChatModel | None = None):
-    """Built once at startup. Conversation memory is the checkpointer's thread
-    (one per chat session, see ParkingChat); SummarizationMiddleware folds
-    older turns into a summary once the history outgrows history_max_tokens.
-    Per-request dependencies arrive through `context` (ChatContext)."""
+class UserAgentState(AgentState):
+    draft: NotRequired[dict | None]  # set by prepare_reservation's Command
+
+
+def build_user_agent(llm: BaseChatModel, summary_llm: BaseChatModel | None = None):
+    """Run as ParkingGraph's `agent` node (app/ai/graph.py), which owns the
+    conversation's persistence; SummarizationMiddleware folds older turns into
+    a summary once the history outgrows history_max_tokens. Per-request
+    dependencies arrive through `context` (ChatContext)."""
 
     @dynamic_prompt
     def _current_time_prompt(_request) -> str:
@@ -147,11 +144,9 @@ def build_user_agent(llm: BaseChatModel, checkpointer: BaseCheckpointSaver, summ
     return create_agent(
         model=llm,
         tools=create_parking_tools(),
-        state_schema=ChatState,
+        state_schema=UserAgentState,
         context_schema=ChatContext,
-        checkpointer=checkpointer,
         middleware=[
-            session_commands,
             _current_time_prompt,
             # PII first: summaries are built from already-redacted tool results.
             *_pii_guardrails(),

@@ -15,12 +15,10 @@ from starlette.concurrency import run_in_threadpool
 from app.ai.guardrails import get_pii_guard
 from app.config import settings
 from app.db.models import Parking
-from app.db.repositories.base import AbstractSQLRepository, AbstractVectorRepository
-from app.db.repositories.parking import ParkingRepository
 from app.schemas.chat import BookingInput
 
 if TYPE_CHECKING:
-    from app.ai.graph import ApprovalPipeline
+    from app.services.parking import ParkingService
 
 
 @dataclass
@@ -28,13 +26,10 @@ class ChatContext:
     """Per-request dependencies of the user agent (its `context_schema`).
 
     The agent itself is built once at startup; everything bound to one
-    request - the request-scoped DB session's repositories, and the sources
-    cited in this turn's answer - arrives here through runtime.context."""
+    request - the ParkingService over the request-scoped DB session, and the
+    sources cited in this turn's answer - arrives here through runtime.context."""
 
-    repository: ParkingRepository
-    vector_repository: AbstractVectorRepository
-    reservations: AbstractSQLRepository
-    approval_pipeline: "ApprovalPipeline"
+    service: "ParkingService"
     sources: list[dict] = field(default_factory=list)
 
 
@@ -45,7 +40,7 @@ def create_parking_tools() -> list[BaseTool]:
     async def list_parkings(runtime: ToolRuntime[ChatContext]) -> dict:
         """List public parking IDs, names, and districts."""
 
-        result = await runtime.context.repository.session.execute(
+        result = await runtime.context.service.repository.session.execute(
             sa.select(
                 Parking.id,
                 Parking.name,
@@ -68,7 +63,7 @@ def create_parking_tools() -> list[BaseTool]:
 
         requested_date = on_date or datetime.now(local_timezone).date()
 
-        info = await runtime.context.repository.get_public_info(
+        info = await runtime.context.service.repository.get_public_info(
             parking_id=parking_id,
             on_date=requested_date,
         )
@@ -91,7 +86,7 @@ def create_parking_tools() -> list[BaseTool]:
 
         sources = runtime.context.sources
         documents = await run_in_threadpool(
-            runtime.context.vector_repository.search,
+            runtime.context.service.vector_repository.search,
             query=query,
             k=settings.retriever_k,
         )
@@ -149,9 +144,9 @@ def create_parking_tools() -> list[BaseTool]:
             ends_at=ends_at,
         )
 
-        await runtime.context.reservations.validate_request(booking)
+        await runtime.context.service.reservations.validate_request(booking)
 
-        info = await runtime.context.repository.get_public_info(
+        info = await runtime.context.service.repository.get_public_info(
             parking_id=parking_id,
             on_date=booking.starts_at.astimezone(local_timezone).date(),
         )

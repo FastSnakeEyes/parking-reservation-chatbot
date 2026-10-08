@@ -30,20 +30,28 @@ default; set `LANGSMITH_TRACING=true` plus `LANGSMITH_API_KEY` (and optionally
 
 ### Request flow
 
-1. A user chats via the web UI (`app/templates/chat.html`) → `POST /chat`. The agent answers
-   from Milvus/Postgres, or collects booking details and asks the user to `confirm`.
-2. On `confirm`, the reservation is saved to Postgres with `status="pending"`, and
-   `ParkingChat.start_approval()` drafts a notification and starts the approval graph, which
-   immediately pauses at `admin_approval` (an `interrupt()`, persisted by a Postgres checkpointer
-   so it survives a restart).
+`POST /chat` → `ParkingGraph` (`app/ai/graph.py`) → graph nodes → `ParkingService`
+(`app/services/parking.py`) → repositories. Routes only handle HTTP (validation, auth,
+response shape); the graph owns the conversation workflow, one Postgres-checkpointed thread
+per chat session (`chat:{session_id}`); the service is a capability the graph calls, and
+never calls the graph.
+
+1. A user chats via the web UI (`app/templates/chat.html`) → `POST /chat` → `ParkingGraph.chat()`.
+   The `route_input` node handles the injection guard and the `cancel`/`confirm` commands;
+   anything else goes to the user agent, which answers from Milvus/Postgres or collects booking
+   details and shows a review, asking the user to `confirm`.
+2. On `confirm`, the `book` node calls `ParkingService.book()`: the reservation is saved with
+   `status="pending"` and its `conversation_id`. The admin agent drafts a notification, and the
+   conversation pauses at `admin_decision` (an `interrupt()`, persisted by the checkpointer so it
+   survives a restart). `/chat` answers `status: "waiting_for_admin"` until the admin decides.
 3. The administrator polls `GET /admin/reservations` (via `ui/admin_app.py`) and approves or
-   rejects. `POST /admin/reservations/{id}/decision` resumes the graph with that decision.
-4. On approval, `record_or_close` calls the MCP server's `record_reservation` tool (writes
+   rejects. `POST /admin/reservations/{id}/decision` looks up the reservation's
+   `conversation_id` and resumes that conversation with the decision (`ParkingGraph.resume()`).
+4. On approval, the `record_decision` node calls `ParkingService.record_decision()`, which calls
+   the MCP server's `record_reservation` tool (writes
    `Name | Car Number | Reservation Period | Approval Time` to a file) and sets the
    reservation's status to `recorded`; on rejection it's set to `rejected`.
-5. The customer finds out the next time they send any message in that session:
-   `ParkingChat.pending_decision_notice` checks their last reservation's status and leads
-   with an approved/rejected notice before anything else.
+5. The customer's next message in that session is answered with the approved/rejected notice.
 
 ## Prerequisites
 
@@ -126,10 +134,11 @@ default; set `LANGSMITH_TRACING=true` plus `LANGSMITH_API_KEY` (and optionally
 
 ```
 app/
-  ai/            chat agent (memory via the Postgres checkpointer + summarization
-                 middleware), session middleware, LangGraph orchestration, admin agent,
-                 guardrails, tools
+  ai/            ParkingGraph (the conversation workflow, incl. the admin-approval
+                 interrupt), user/admin agents, guardrails, tools, idle-thread cleanup
   api/routers/   /chat, /admin REST endpoints, and pages.py (/, /admin, /health)
+  services/      ParkingService: book, approval facts, pending reservations, record a
+                 decision (MCP) - called by ParkingGraph's nodes and the admin API
   db/            SQLAlchemy models and repositories (Postgres)
   schemas/       Pydantic request/response models
   static/, templates/   the chat web UI

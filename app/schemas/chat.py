@@ -20,6 +20,9 @@ class SourceResponse(BaseModel):
 
 
 class ChatResponse(BaseModel):
+    # "waiting_for_admin" while the conversation is paused for the
+    # administrator's approval of a submitted reservation.
+    status: Literal["complete", "waiting_for_admin"] = "complete"
     answer: str
     sources: list[SourceResponse] = Field(default_factory=list)
 

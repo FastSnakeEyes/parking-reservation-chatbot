@@ -49,6 +49,9 @@ class Reservation(Base):
     approved_at: Mapped[datetime | None] = mapped_column(
         sa.DateTime(timezone=True),
     )
+    # The ParkingGraph thread (chat:{session_id}) paused waiting for this
+    # reservation's approval - the admin API resumes it by this id.
+    conversation_id: Mapped[str | None] = mapped_column(sa.String(100))
 
     capacity_type: Mapped[ParkingSpaceType] = relationship(
         back_populates="reservations",

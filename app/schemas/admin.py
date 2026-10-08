@@ -21,3 +21,7 @@ class PendingReservation(BaseModel):
 class DecisionRequest(BaseModel):
     decision: Literal["approved", "rejected"]
     note: str | None = None
+
+
+class DecisionResponse(BaseModel):
+    status: str  # the reservation's resulting status: "recorded" | "rejected"

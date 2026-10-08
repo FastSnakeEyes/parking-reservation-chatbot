@@ -17,6 +17,12 @@ class ReservationRepository(PostgresRepository[Reservation]):
         super().__init__(session=session, model=Reservation)
         self.timezone = ZoneInfo(settings.timezone)
 
+    async def list_pending(self) -> list[Reservation]:
+        rows = await self.session.scalars(
+            sa.select(Reservation).where(Reservation.status == "pending").order_by(Reservation.created_at)
+        )
+        return list(rows.all())
+
     async def validate_request(self, booking: BookingInput) -> None:
         if booking.starts_at <= datetime.now(UTC):
             raise ValueError("Reservation start must be in the future")
@@ -38,6 +44,7 @@ class ReservationRepository(PostgresRepository[Reservation]):
         self,
         reservation_id: UUID,
         booking: BookingInput,
+        conversation_id: str | None = None,
     ) -> UUID:
         # Return the receipt on a retry after a successful DB commit.
         existing = await self.session.get(
@@ -56,6 +63,7 @@ class ReservationRepository(PostgresRepository[Reservation]):
                 id=reservation_id,
                 **booking.model_dump(),
                 status="pending",
+                conversation_id=conversation_id,
             )
             .on_conflict_do_nothing(
                 index_elements=[Reservation.__table__.c.id],

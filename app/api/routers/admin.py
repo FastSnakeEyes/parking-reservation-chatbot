@@ -1,19 +1,19 @@
 """Stage 2: REST API for the administrator to review and decide on pending
 reservations. ui/admin_app.py (Streamlit) is the console that calls this.
+
+A submitted reservation's conversation waits at ParkingGraph's
+admin_decision interrupt; a decision resumes that conversation's thread.
 """
 
 from uuid import UUID
 
-import sqlalchemy as sa
-from fastapi import APIRouter, Depends, Header, HTTPException, Request
+from fastapi import APIRouter, Depends, Header, HTTPException
 
-from app.ai.graph import ApprovalPipeline
+from app.ai.tools import ChatContext
 from app.config import settings
-from app.db.models import Reservation
-from app.db.repositories.reservation import ReservationRepository
-from app.dependencies import SQLSessionDependency
+from app.dependencies import ParkingGraphDependency, ParkingServiceDependency
 from app.logger import get_logger
-from app.schemas.admin import DecisionRequest, PendingReservation
+from app.schemas.admin import DecisionRequest, DecisionResponse, PendingReservation
 
 logger = get_logger(__name__)
 
@@ -32,15 +32,9 @@ async def require_admin(x_admin_key: str = Header(default="")) -> None:
     dependencies=[Depends(require_admin)],
 )
 async def list_pending(
-    request: Request,
-    session: SQLSessionDependency,
+    service: ParkingServiceDependency,
+    graph: ParkingGraphDependency,
 ) -> list[PendingReservation]:
-    pipeline: ApprovalPipeline = request.app.state.approval_pipeline
-
-    rows = await session.scalars(
-        sa.select(Reservation).where(Reservation.status == "pending").order_by(Reservation.created_at)
-    )
-
     return [
         PendingReservation(
             id=reservation.id,
@@ -52,31 +46,39 @@ async def list_pending(
             starts_at=reservation.starts_at,
             ends_at=reservation.ends_at,
             created_at=reservation.created_at,
-            message=await pipeline.pending_message(reservation.id),
+            message=(await graph.pending_message(reservation.conversation_id) if reservation.conversation_id else None),
         )
-        for reservation in rows.all()
+        for reservation in await service.list_pending()
     ]
 
 
 @router.post(
     "/reservations/{reservation_id}/decision",
+    response_model=DecisionResponse,
     dependencies=[Depends(require_admin)],
 )
 async def decide(
     reservation_id: UUID,
     payload: DecisionRequest,
-    request: Request,
-    session: SQLSessionDependency,
-) -> dict:
-    reservations = ReservationRepository(session)
-    reservation = await reservations.get_by_id(reservation_id)
+    service: ParkingServiceDependency,
+    graph: ParkingGraphDependency,
+) -> DecisionResponse:
+    reservation = await service.get_pending(reservation_id)
 
-    if reservation is None or reservation.status != "pending":
+    if reservation is None or reservation.conversation_id is None:
         raise HTTPException(status_code=404, detail="No pending reservation with that id")
 
     logger.info("Admin decision received for reservation %s: %s", reservation_id, payload.decision)
 
-    pipeline: ApprovalPipeline = request.app.state.approval_pipeline
-    await pipeline.resume(reservation_id, payload.decision, payload.note)
+    try:
+        status = await graph.resume(
+            reservation.conversation_id,
+            reservation_id,
+            payload.decision,
+            payload.note,
+            ChatContext(service=service),
+        )
+    except LookupError as exc:
+        raise HTTPException(status_code=409, detail="That reservation's conversation is not awaiting approval") from exc
 
-    return {"status": "ok"}
+    return DecisionResponse(status=status)

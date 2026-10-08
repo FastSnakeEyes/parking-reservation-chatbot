@@ -1,24 +1,18 @@
 """app/ai/chat_cleanup.py against a real AsyncPostgresSaver: only chat
-threads idle past the cutoff are deleted - never active chats, and never
-the approval graph's reservation threads, however old."""
+threads idle past the cutoff are deleted - never active chats, never a
+conversation still waiting for the administrator, and never non-chat threads."""
 
 from datetime import UTC, datetime, timedelta
 from uuid import uuid4
 
 import pytest
-import pytest_asyncio
+import sqlalchemy as sa
 from app.ai.chat_cleanup import delete_idle_chat_threads
+from app.db.models import Reservation
+from app.db.repositories.reservation import ReservationRepository
+from app.schemas.chat import BookingInput
 from langgraph.checkpoint.base import empty_checkpoint
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
-
-
-@pytest_asyncio.fixture
-async def checkpointer(postgres_container):
-    url = postgres_container.replace("postgresql+asyncpg://", "postgresql://")
-
-    async with AsyncPostgresSaver.from_conn_string(url) as saver:
-        await saver.setup()
-        yield saver
+from sqlalchemy.ext.asyncio import AsyncSession
 
 
 async def _write_checkpoint(checkpointer, thread_id: str, age: timedelta) -> None:
@@ -39,19 +33,43 @@ async def _exists(checkpointer, thread_id: str) -> bool:
 
 @pytest.mark.integration
 @pytest.mark.asyncio
-async def test_deletes_only_idle_chat_threads(engine, checkpointer):
+async def test_deletes_only_idle_chat_threads(engine, checkpointer, real_parking):
     idle_chat = f"chat:{uuid4()}"
     active_chat = f"chat:{uuid4()}"
-    old_approval = str(uuid4())  # approval graph threads are keyed by bare reservation_id
+    awaiting_admin = f"chat:{uuid4()}"
+    other_thread = str(uuid4())  # not a chat thread
 
     await _write_checkpoint(checkpointer, idle_chat, age=timedelta(hours=2))
     await _write_checkpoint(checkpointer, active_chat, age=timedelta(hours=2))
     await _write_checkpoint(checkpointer, active_chat, age=timedelta(minutes=1))  # newest one counts
-    await _write_checkpoint(checkpointer, old_approval, age=timedelta(days=30))
+    await _write_checkpoint(checkpointer, awaiting_admin, age=timedelta(days=2))
+    await _write_checkpoint(checkpointer, other_thread, age=timedelta(days=30))
 
-    deleted = await delete_idle_chat_threads(engine, checkpointer, idle_seconds=3600)
+    # The admin hasn't decided yet: the conversation must survive to be resumed.
+    starts_at = datetime.now(UTC) + timedelta(days=1)
+    booking = BookingInput(
+        parking_id=real_parking.id,
+        space_type="standard",
+        first_name="Jane",
+        surname="Doe",
+        car_number="ABC123",
+        starts_at=starts_at,
+        ends_at=starts_at + timedelta(hours=2),
+    )
+    reservation_id = uuid4()
+    # Committed for real (the cleanup query runs on its own connection), then removed.
+    async with AsyncSession(engine) as session:
+        await ReservationRepository(session).submit_pending(reservation_id, booking, awaiting_admin)
+
+    try:
+        deleted = await delete_idle_chat_threads(engine, checkpointer, idle_seconds=3600)
+    finally:
+        async with AsyncSession(engine) as session:
+            await session.execute(sa.delete(Reservation).where(Reservation.id == reservation_id))
+            await session.commit()
 
     assert deleted >= 1
     assert not await _exists(checkpointer, idle_chat)
     assert await _exists(checkpointer, active_chat)
-    assert await _exists(checkpointer, old_approval)
+    assert await _exists(checkpointer, awaiting_admin)
+    assert await _exists(checkpointer, other_thread)

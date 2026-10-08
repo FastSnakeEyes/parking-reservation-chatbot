@@ -25,6 +25,7 @@ os.environ.setdefault("TESTCONTAINERS_RYUK_DISABLED", "true")
 
 from collections.abc import AsyncIterator
 from datetime import date, time
+from uuid import uuid4
 
 import fakeredis
 import pytest
@@ -71,6 +72,44 @@ async def db_session(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
     await session.close()
     await transaction.rollback()
     await connection.close()
+
+
+class FakeLock:
+    async def acquire(self):
+        return True
+
+    async def release(self):
+        return None
+
+    async def __aenter__(self):
+        return self
+
+    async def __aexit__(self, *exc):
+        return None
+
+
+class LockOnlyRedis:
+    """Only ParkingGraph's per-thread lock; fakeredis can't run its Lua release script."""
+
+    def lock(self, *args, **kwargs):
+        return FakeLock()
+
+
+@pytest.fixture
+def lock_redis():
+    return LockOnlyRedis()
+
+
+@pytest_asyncio.fixture
+async def checkpointer(postgres_container):
+    """The real AsyncPostgresSaver the app uses, on the test Postgres."""
+    from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+
+    url = postgres_container.replace("postgresql+asyncpg://", "postgresql://")
+
+    async with AsyncPostgresSaver.from_conn_string(url) as saver:
+        await saver.setup()
+        yield saver
 
 
 @pytest.fixture
@@ -127,5 +166,64 @@ async def sample_parking(db_session: AsyncSession) -> Parking:
         )
 
     await db_session.commit()
+
+    return parking
+
+
+@pytest_asyncio.fixture
+async def real_session(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
+    """A plainly-committing session (unlike `db_session`'s rollback-savepoint
+    isolation), so the whole flow runs against committed data, as in the app."""
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        yield session
+
+
+@pytest_asyncio.fixture
+async def real_parking(real_session: AsyncSession) -> Parking:
+    parking = Parking(
+        slug=f"e2e-parking-{uuid4()}",
+        name="E2E Test Parking",
+        district="Center",
+        latitude=54.68,
+        longitude=25.27,
+        total_spaces=10,
+        bookable_spaces=5,
+    )
+    real_session.add(parking)
+    await real_session.flush()
+
+    real_session.add(
+        ParkingSpaceType(
+            parking_id=parking.id,
+            space_type="standard",
+            total_spaces=10,
+            bookable_spaces=5,
+        )
+    )
+
+    for day in range(1, 8):
+        real_session.add(
+            WorkingHours(
+                parking_id=parking.id,
+                day_of_week=day,
+                open_time=time(0, 0),
+                close_time=time(23, 59),
+                is_closed=False,
+            )
+        )
+
+    for day_type in ("weekday", "weekend"):
+        real_session.add(
+            Price(
+                parking_id=parking.id,
+                space_type="standard",
+                day_type=day_type,
+                valid_from=date(2020, 1, 1),
+                price_per_hour=1,
+                daily_max=10,
+            )
+        )
+
+    await real_session.commit()
 
     return parking

@@ -1,81 +1,107 @@
-"""Full Stage 2/3/4 flow: a booking is submitted, handed to the approval
-graph, and the administrator's decision either records it through the real
-MCP server (approved) or just closes it out (rejected) - end to end, against
-a real Postgres and a real MCP server subprocess.
+"""Full Stage 1-4 flow through ParkingGraph: the customer gets a review,
+confirms, the conversation pauses for the administrator, and the decision
+either records the reservation through the real MCP server (approved) or
+just closes it out (rejected) - end to end, against a real Postgres and a
+real MCP server subprocess, with the app's Postgres checkpointer. Only the
+LLM is scripted.
 """
 
 from datetime import UTC, datetime, timedelta
-from uuid import uuid4
 
 import pytest
-from app.ai.graph import ApprovalPipeline
+from app.ai.graph import ParkingGraph
+from app.ai.tools import ChatContext
 from app.db.models import Reservation
+from app.db.repositories.parking import ParkingRepository
 from app.db.repositories.reservation import ReservationRepository
-from app.schemas.chat import BookingInput
-from tests.e2e.conftest import ADMIN_DRAFT_MESSAGE
+from app.services.parking import ParkingService
+from langchain_core.messages import AIMessage
+from sqlalchemy.ext.asyncio import AsyncSession
+from tests.e2e.conftest import ADMIN_DRAFT_MESSAGE, ADMIN_TURN, ScriptedModel
 
 FUTURE_START = datetime.now(UTC) + timedelta(days=1)
 FUTURE_END = FUTURE_START + timedelta(hours=3)
+SESSION = "e2e-session"
 
 
-def _booking(parking_id: int) -> BookingInput:
-    return BookingInput(
-        parking_id=parking_id,
-        space_type="standard",
-        first_name="Jane",
-        surname="Doe",
-        car_number="E2E-123",
-        starts_at=FUTURE_START,
-        ends_at=FUTURE_END,
+def _prepare_call(parking_id: int) -> AIMessage:
+    args = {
+        "parking_id": parking_id,
+        "space_type": "standard",
+        "first_name": "Jane",
+        "surname": "Doe",
+        "car_number": "E2E-123",
+        "starts_at": FUTURE_START.isoformat(),
+        "ends_at": FUTURE_END.isoformat(),
+    }
+    return AIMessage(content="", tool_calls=[{"name": "prepare_reservation", "args": args, "id": "c1"}])
+
+
+def _context(session: AsyncSession) -> ChatContext:
+    return ChatContext(service=ParkingService(ParkingRepository(session), ReservationRepository(session)))
+
+
+async def _submit(engine, checkpointer, real_parking, lock_redis) -> tuple[ParkingGraph, Reservation]:
+    """Customer turns: review, then confirm - the conversation pauses for the admin."""
+    graph = ParkingGraph(
+        ScriptedModel(responses=[_prepare_call(real_parking.id), *ADMIN_TURN]), checkpointer, lock_redis
     )
+
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        review = await graph.chat(SESSION, "book it", _context(session))
+        assert review["answer"].startswith("Please review your reservation request:")
+
+        confirmed = await graph.chat(SESSION, "confirm", _context(session))
+        assert confirmed["status"] == "waiting_for_admin"
+
+        reservations = await ReservationRepository(session).list_pending()
+        reservation = next(r for r in reservations if r.conversation_id == graph.thread_id(SESSION))
+
+    assert await graph.pending_message(reservation.conversation_id) == ADMIN_DRAFT_MESSAGE
+    return graph, reservation
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_approval_records_reservation_via_mcp_server(
-    real_session,
-    real_parking,
-    approval_pipeline: ApprovalPipeline,
-    mcp_test_server,
+    engine, checkpointer, real_parking, mcp_settings, lock_redis
 ):
-    reservation_id = uuid4()
-    booking = _booking(real_parking.id)
-    await ReservationRepository(real_session).submit_pending(reservation_id, booking)
+    graph, reservation = await _submit(engine, checkpointer, real_parking, lock_redis)
 
-    await approval_pipeline.start(reservation_id, {"Customer": "Jane Doe", "Car number": "E2E-123"})
-    assert await approval_pipeline.pending_message(reservation_id) == ADMIN_DRAFT_MESSAGE
+    # Admin request: its own DB session, as in the app.
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        status = await graph.resume(reservation.conversation_id, reservation.id, "approved", None, _context(session))
+        stored = await session.get(Reservation, reservation.id, populate_existing=True)
 
-    await approval_pipeline.resume(reservation_id, "approved")
+    assert status == "recorded"
+    assert stored.status == "recorded"
+    assert stored.approved_at is not None
 
-    reservation = await real_session.get(Reservation, reservation_id, populate_existing=True)
-    assert reservation.status == "recorded"
-    assert reservation.approved_at is not None
-
-    contents = mcp_test_server["file"].read_text()
+    contents = mcp_settings["file"].read_text()
     assert "Jane Doe | E2E-123" in contents
-    assert contents.count("\n") == 1
+
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        notice = await graph.chat(SESSION, "any news?", _context(session))
+
+    assert notice["answer"].startswith(f"Update: your reservation {reservation.id} was approved")
 
 
 @pytest.mark.integration
 @pytest.mark.asyncio
 async def test_rejection_closes_without_calling_mcp_server(
-    real_session,
-    real_parking,
-    approval_pipeline: ApprovalPipeline,
-    mcp_test_server,
+    engine, checkpointer, real_parking, mcp_settings, lock_redis
 ):
-    reservation_id = uuid4()
-    booking = _booking(real_parking.id)
-    await ReservationRepository(real_session).submit_pending(reservation_id, booking)
+    graph, reservation = await _submit(engine, checkpointer, real_parking, lock_redis)
 
-    before = mcp_test_server["file"].read_text() if mcp_test_server["file"].exists() else ""
+    before = mcp_settings["file"].read_text() if mcp_settings["file"].exists() else ""
 
-    await approval_pipeline.start(reservation_id, {"Customer": "Jane Doe", "Car number": "E2E-123"})
-    await approval_pipeline.resume(reservation_id, "rejected")
+    async with AsyncSession(engine, expire_on_commit=False) as session:
+        status = await graph.resume(reservation.conversation_id, reservation.id, "rejected", None, _context(session))
+        stored = await session.get(Reservation, reservation.id, populate_existing=True)
 
-    reservation = await real_session.get(Reservation, reservation_id, populate_existing=True)
-    assert reservation.status == "rejected"
-    assert reservation.approved_at is None
+    assert status == "rejected"
+    assert stored.status == "rejected"
+    assert stored.approved_at is None
 
-    after = mcp_test_server["file"].read_text() if mcp_test_server["file"].exists() else ""
+    after = mcp_settings["file"].read_text() if mcp_settings["file"].exists() else ""
     assert after == before

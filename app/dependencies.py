@@ -9,10 +9,13 @@ from pymilvus import MilvusClient
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.ai.parking_chat import ParkingChat
+from app.ai.graph import ParkingGraph
 from app.config import settings
 from app.db.repositories.base import AbstractVectorRepository
 from app.db.repositories.milvus import MilvusRepository
+from app.db.repositories.parking import ParkingRepository
+from app.db.repositories.reservation import ReservationRepository
+from app.services.parking import ParkingService
 
 
 def create_vector_repository() -> MilvusRepository:
@@ -148,22 +151,30 @@ async def global_user_limit(
     await redis_conn.expire(key, settings.active_user_ttl)
 
 
-def get_chat_service(
+def get_parking_service(
     request: Request,
     session: SQLSessionDependency,
-) -> ParkingChat:
-    return ParkingChat(
-        session=session,
-        redis=request.app.state.redis,
+) -> ParkingService:
+    return ParkingService(
+        repository=ParkingRepository(session),
+        reservations=ReservationRepository(session),
         vector_repository=request.app.state.vector_repository,
-        agent=request.app.state.chat_agent,
-        approval_pipeline=request.app.state.approval_pipeline,
     )
 
 
-ChatServiceDependency = Annotated[
-    ParkingChat,
-    Depends(get_chat_service),
+ParkingServiceDependency = Annotated[
+    ParkingService,
+    Depends(get_parking_service),
+]
+
+
+def get_parking_graph(request: Request) -> ParkingGraph:
+    return request.app.state.parking_graph
+
+
+ParkingGraphDependency = Annotated[
+    ParkingGraph,
+    Depends(get_parking_graph),
 ]
 
 VectorRepositoryDependency = Annotated[

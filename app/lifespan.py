@@ -9,9 +9,8 @@ from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import create_async_engine
 from starlette.concurrency import run_in_threadpool
 
-from app.ai.agents import build_user_agent
 from app.ai.chat_cleanup import run_chat_cleanup
-from app.ai.graph import ApprovalPipeline
+from app.ai.graph import ParkingGraph
 from app.ai.guardrails import get_pii_guard
 from app.config import settings
 from app.dependencies import create_vector_repository
@@ -103,9 +102,8 @@ async def lifespan(app: FastAPI):
             AsyncPostgresSaver.from_conn_string(settings.database_url_psycopg)
         )
         await checkpointer.setup()  # idempotent; creates checkpoint tables on first run
-        approval_pipeline = ApprovalPipeline(llm, engine, checkpointer)
         # Built once; per-request dependencies go in through ChatContext.
-        chat_agent = build_user_agent(llm, checkpointer)
+        parking_graph = ParkingGraph(llm, checkpointer, redis)
 
         # Pushed after the engine/checkpointer, so the stack cancels it before closing them.
         cleanup_task = asyncio.create_task(run_chat_cleanup(engine, checkpointer))
@@ -114,8 +112,7 @@ async def lifespan(app: FastAPI):
         app.state.db_engine = engine
         app.state.redis = redis
         app.state.vector_repository = vector_repository
-        app.state.approval_pipeline = approval_pipeline
-        app.state.chat_agent = chat_agent
+        app.state.parking_graph = parking_graph
 
         logger.info("Startup complete")
 

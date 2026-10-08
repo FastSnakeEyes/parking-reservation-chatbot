@@ -24,7 +24,7 @@ app.mount(
     name="static",
 )
 
-# Defines POST /chat using ParkingChat and SQL/vector tools.
+# Defines POST /chat using ParkingService.ask (the user agent).
 app.include_router(chat_router)
 
 # Defines the admin console API (Stage 2); the /admin page and

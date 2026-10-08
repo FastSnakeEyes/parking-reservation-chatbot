@@ -4,9 +4,8 @@ The chat cookie expires after cookie_ttl seconds without a request, after
 which its thread can never be reached again - but AsyncPostgresSaver has
 no TTL, so without this job those threads would stay forever.
 
-Only `chat:`-prefixed threads are touched: the approval graph shares the
-checkpointer (threads keyed by reservation_id) and its threads must survive
-however long the administrator takes to decide.
+Only `chat:`-prefixed threads are touched, and never one still waiting for
+an administrator's decision on its reservation.
 """
 
 import asyncio
@@ -15,18 +14,24 @@ import sqlalchemy as sa
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from sqlalchemy.ext.asyncio import AsyncEngine
 
-from app.ai.parking_chat import CHAT_THREAD_PREFIX
+from app.ai.graph import CHAT_THREAD_PREFIX
 from app.config import settings
 from app.logger import get_logger
 
 logger = get_logger(__name__)
 
 # A thread is idle when even its newest checkpoint is older than the cutoff.
+# Threads paused for an administrator's decision are kept however long it takes:
+# the admin API resumes them by reservations.conversation_id.
 IDLE_THREADS_SQL = sa.text(
     """
     SELECT thread_id
     FROM checkpoints
     WHERE thread_id LIKE :prefix
+      AND thread_id NOT IN (
+          SELECT conversation_id FROM reservations
+          WHERE status = 'pending' AND conversation_id IS NOT NULL
+      )
     GROUP BY thread_id
     HAVING max((checkpoint ->> 'ts')::timestamptz) < now() - make_interval(secs => :idle_seconds)
     """

@@ -10,8 +10,8 @@ from app.main import app
 from httpx import ASGITransport, AsyncClient
 
 
-class StubPipeline:
-    async def pending_message(self, reservation_id):
+class StubGraph:
+    async def pending_message(self, thread_id):
         return None
 
 
@@ -21,7 +21,8 @@ def admin_console_client(db_session):
         yield db_session
 
     app.dependency_overrides[get_sql_session] = override_session
-    app.state.approval_pipeline = StubPipeline()
+    app.state.parking_graph = StubGraph()
+    app.state.vector_repository = None
 
     try:
         yield AsyncClient(transport=ASGITransport(app=app), base_url="http://test")
