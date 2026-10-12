@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from app.enums import ApprovalDecision, ReservationStatus
 
@@ -22,6 +22,13 @@ class PendingReservation(BaseModel):
 class DecisionRequest(BaseModel):
     decision: ApprovalDecision
     note: str | None = None
+
+
+class AdminReplyDecision(BaseModel):
+    """parse_admin_reply's structured output (app/ai/parsers.py)."""
+
+    approved: bool = Field(description="True only if the administrator clearly approved the reservation")
+    reason: str = Field(description="The administrator's reason or comment; empty string if none")
 
 
 class DecisionResponse(BaseModel):

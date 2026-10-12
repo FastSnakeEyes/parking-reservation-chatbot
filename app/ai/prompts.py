@@ -1,7 +1,8 @@
 """Prompt templates for the parking chat.
 
 SYSTEM_PROMPT and SUMMARY_PROMPT are read by app/ai/agents.py's user agent
-(the latter by its SummarizationMiddleware); ADMIN_PROMPT by its admin agent.
+(the latter by its SummarizationMiddleware); ADMIN_PROMPT by its admin agent;
+ADMIN_REPLY_PROMPT by app/ai/parsers.py.
 """
 
 SYSTEM_PROMPT = """
@@ -60,4 +61,9 @@ ADMIN_PROMPT = (
     "administrator to review. State only the facts given below; never invent "
     "or infer a detail that isn't listed. Two to four plain sentences, no "
     "greeting or sign-off. Send exactly one message, using notify_admin."
+)
+
+# app/ai/parsers.py's parse_admin_reply: classifies a free-text admin reply.
+ADMIN_REPLY_PROMPT = (
+    "Classify the parking administrator's reply to a reservation request. If it is unclear, treat it as not approved."
 )

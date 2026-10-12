@@ -12,7 +12,7 @@ from collections.abc import Iterator
 
 import httpx
 import pytest
-from app.ai.agents import notify_admin
+from app.ai.tools import notify_admin
 from app.config import settings
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage

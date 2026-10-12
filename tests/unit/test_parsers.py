@@ -1,5 +1,5 @@
 import pytest
-from app.ai.agents import parse_admin_reply
+from app.ai.parsers import parse_admin_reply
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
 
@@ -14,7 +14,7 @@ class FakeStructuredOutputModel(FakeMessagesListChatModel):
 
 
 def _decision_reply(**fields) -> AIMessage:
-    return AIMessage(content="", tool_calls=[{"name": "AdminDecision", "args": fields, "id": "call_1"}])
+    return AIMessage(content="", tool_calls=[{"name": "AdminReplyDecision", "args": fields, "id": "call_1"}])
 
 
 @pytest.mark.asyncio

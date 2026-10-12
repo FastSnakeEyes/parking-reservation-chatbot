@@ -15,24 +15,18 @@ conversation's persistence and workflow:
    waits at ParkingGraph's `admin_decision` interrupt.
 """
 
-from datetime import datetime
 from typing import NotRequired
-from zoneinfo import ZoneInfo
 
 from langchain.agents import AgentState, create_agent
-from langchain.agents.middleware import SummarizationMiddleware, dynamic_prompt
-from langchain.tools import tool
+from langchain.agents.middleware import SummarizationMiddleware
 from langchain_core.language_models import BaseChatModel
-from pydantic import BaseModel, Field
 
 from app.ai.guardrails import pii_middleware
-from app.ai.prompts import ADMIN_PROMPT, SUMMARY_PROMPT, SYSTEM_PROMPT
+from app.ai.middleware import current_time_prompt
+from app.ai.prompts import ADMIN_PROMPT, SUMMARY_PROMPT
 from app.ai.token_counting import count_tokens
-from app.ai.tools import ChatContext, create_parking_tools
+from app.ai.tools import ChatContext, create_parking_tools, notify_admin
 from app.config import settings
-from app.logger import get_logger
-
-logger = get_logger(__name__)
 
 
 class UserAgentState(AgentState):
@@ -45,18 +39,13 @@ def build_user_agent(llm: BaseChatModel, summary_llm: BaseChatModel | None = Non
     a summary once the history outgrows history_max_tokens. Per-request
     dependencies arrive through `context` (ChatContext)."""
 
-    @dynamic_prompt
-    def _current_time_prompt(_request) -> str:
-        now = datetime.now(ZoneInfo(settings.timezone)).strftime(f"%A %Y-%m-%d %H:%M ({settings.timezone})")
-        return f"{SYSTEM_PROMPT}\n\nCurrent local date/time: {now}."
-
     return create_agent(
         model=llm,
         tools=create_parking_tools(),
         state_schema=UserAgentState,
         context_schema=ChatContext,
         middleware=[
-            _current_time_prompt,
+            current_time_prompt,
             # PII first: summaries are built from already-redacted tool results.
             *pii_middleware(),
             SummarizationMiddleware(
@@ -73,39 +62,5 @@ def build_user_agent(llm: BaseChatModel, summary_llm: BaseChatModel | None = Non
 # --------------------------------------------------------------------------- #
 # Admin agent
 # --------------------------------------------------------------------------- #
-
-
-class AdminDecision(BaseModel):
-    approved: bool = Field(description="True only if the administrator clearly approved the reservation")
-    reason: str = Field(description="The administrator's reason or comment; empty string if none")
-
-
-@tool
-def notify_admin(text: str) -> str:
-    """Send a reservation approval request to the parking administrator."""
-    # No messenger/email is wired up: app/ai/graph.py's request_approval
-    # node reads this call's args back out instead of it being sent anywhere.
-    logger.info("Drafted admin notification: %s", text)
-    return "Request delivered to the administrator."
-
-
 def build_admin_agent(llm: BaseChatModel):
     return create_agent(model=llm, tools=[notify_admin], system_prompt=ADMIN_PROMPT)
-
-
-def parse_admin_reply(llm: BaseChatModel, reply: str) -> dict:
-    """Turn the administrator's free-text answer ("ok", "no, lot is closed")
-    into a decision. Not used by today's REST console, which already sends
-    a structured decision - kept for a future email/messenger channel."""
-    model = llm.with_structured_output(AdminDecision)
-    decision = model.invoke(
-        [
-            (
-                "system",
-                "Classify the parking administrator's reply to a reservation request. "
-                "If it is unclear, treat it as not approved.",
-            ),
-            ("human", reply),
-        ]
-    )
-    return decision.model_dump()

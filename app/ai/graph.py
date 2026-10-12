@@ -36,9 +36,10 @@ from langgraph.types import Command, interrupt
 from redis.asyncio import Redis
 from starlette.concurrency import run_in_threadpool
 
-from app.ai.agents import build_admin_agent, build_user_agent, notify_admin, parse_admin_reply
+from app.ai.agents import build_admin_agent, build_user_agent
 from app.ai.guardrails import is_prompt_injection
-from app.ai.tools import ChatContext
+from app.ai.parsers import parse_admin_reply
+from app.ai.tools import ChatContext, notify_admin
 from app.constants import (
     ADMIN_LOCK_WAIT_SECONDS,
     CHAT_LOCK_WAIT_SECONDS,

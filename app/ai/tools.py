@@ -16,7 +16,10 @@ from app.ai.guardrails import get_pii_guard
 from app.config import settings
 from app.db.models import Parking
 from app.enums import SpaceType
+from app.logger import get_logger
 from app.schemas.chat import BookingInput
+
+logger = get_logger(__name__)
 
 if TYPE_CHECKING:
     from app.services.parking import ParkingService
@@ -210,3 +213,15 @@ def create_parking_tools() -> list[BaseTool]:
         search_public_rules,
         prepare_reservation,
     ]
+
+
+# --------------------------------------------------------------------------- #
+# Admin agent tools
+# --------------------------------------------------------------------------- #
+@tool
+def notify_admin(text: str) -> str:
+    """Send a reservation approval request to the parking administrator."""
+    # No messenger/email is wired up: app/ai/graph.py's request_approval
+    # node reads this call's args back out instead of it being sent anywhere.
+    logger.info("Drafted admin notification: %s", text)
+    return "Request delivered to the administrator."

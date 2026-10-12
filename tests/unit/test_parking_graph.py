@@ -7,10 +7,9 @@ from uuid import UUID
 
 import pytest
 from app.ai import graph as graph_module
-from app.ai.agents import notify_admin
 from app.ai.graph import ParkingGraph
 from app.ai.token_counting import get_token_counter
-from app.ai.tools import ChatContext
+from app.ai.tools import ChatContext, notify_admin
 from app.config import settings
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
