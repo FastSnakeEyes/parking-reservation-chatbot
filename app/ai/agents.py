@@ -8,24 +8,26 @@ conversation's persistence and workflow:
    so its review (exact price, hours, availability) is the answer verbatim
    rather than the model's retelling. PII redaction and history
    summarization are its middleware.
-2. The admin agent (`build_admin_agent`) drafts the administrator's
-   approval-request message from a reservation's details via its
-   `notify_admin` tool - the text shown in the admin console
-   (app/api/routers/admin.py, ui/admin_app.py) while the conversation
-   waits at ParkingGraph's `admin_decision` interrupt.
+2. The admin agent (`build_admin_agent`) is the human-in-the-loop agent:
+   it proposes a `record_reservation` call whose summary describes the
+   reservation, and HumanInTheLoopMiddleware pauses on it until the
+   administrator approves or rejects it through the admin API
+   (app/api/routers/admin.py, ui/admin_app.py). Approved, the tool records
+   the reservation; rejected, it never runs.
 """
 
 from typing import NotRequired
 
 from langchain.agents import AgentState, create_agent
-from langchain.agents.middleware import SummarizationMiddleware
+from langchain.agents.middleware import HumanInTheLoopMiddleware, SummarizationMiddleware
 from langchain_core.language_models import BaseChatModel
+from langchain_core.messages import ToolCall
 
 from app.ai.guardrails import pii_middleware
 from app.ai.middleware import current_time_prompt
 from app.ai.prompts import ADMIN_PROMPT, SUMMARY_PROMPT
 from app.ai.token_counting import count_tokens
-from app.ai.tools import ChatContext, create_parking_tools, notify_admin
+from app.ai.tools import ChatContext, create_parking_tools, record_reservation
 from app.config import settings
 
 
@@ -62,5 +64,32 @@ def build_user_agent(llm: BaseChatModel, summary_llm: BaseChatModel | None = Non
 # --------------------------------------------------------------------------- #
 # Admin agent
 # --------------------------------------------------------------------------- #
+class AdminAgentState(AgentState):
+    reservation_id: str  # the reservation under review, read by record_reservation
+
+
+def _review_description(tool_call: ToolCall, _state, _runtime) -> str:
+    """What the administrator sees: the agent's summary of the reservation."""
+    return tool_call["args"]["summary"]
+
+
 def build_admin_agent(llm: BaseChatModel):
-    return create_agent(model=llm, tools=[notify_admin], system_prompt=ADMIN_PROMPT)
+    """Run inside ParkingGraph's `admin_review` node; its interrupt pauses the
+    whole conversation until ParkingGraph.resume() delivers the decision."""
+    return create_agent(
+        model=llm,
+        tools=[record_reservation],
+        system_prompt=ADMIN_PROMPT,
+        state_schema=AdminAgentState,
+        context_schema=ChatContext,
+        middleware=[
+            HumanInTheLoopMiddleware(
+                interrupt_on={
+                    record_reservation.name: {
+                        "allowed_decisions": ["approve", "reject"],
+                        "description": _review_description,
+                    }
+                }
+            )
+        ],
+    )

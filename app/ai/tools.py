@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import TYPE_CHECKING
-from uuid import uuid4
+from typing import TYPE_CHECKING, Any
+from uuid import UUID, uuid4
 from zoneinfo import ZoneInfo
 
 import sqlalchemy as sa
@@ -219,9 +219,17 @@ def create_parking_tools() -> list[BaseTool]:
 # Admin agent tools
 # --------------------------------------------------------------------------- #
 @tool
-def notify_admin(text: str) -> str:
-    """Send a reservation approval request to the parking administrator."""
-    # No messenger/email is wired up: app/ai/graph.py's request_approval
-    # node reads this call's args back out instead of it being sent anywhere.
-    logger.info("Drafted admin notification: %s", text)
-    return "Request delivered to the administrator."
+async def record_reservation(summary: str, runtime: ToolRuntime[Any]) -> str:
+    """Record the reservation under review. The administrator reviews this call
+    before it runs, so it only runs once they approve the reservation.
+
+    Args:
+        summary: Two to four plain sentences describing the reservation for the administrator.
+    """
+    # ToolRuntime[Any], not [ChatContext]: a module-level tool's schema is built from
+    # its annotations, and ChatContext's "ParkingService" can't be resolved here
+    # (import cycle). runtime.context is still the ChatContext.
+    # Which reservation comes from the agent's state, not from the model.
+    reservation_id = UUID(runtime.state["reservation_id"])
+    status = await runtime.context.parking_service.record_decision(reservation_id, approved=True)
+    return f"Reservation {reservation_id} is now {status}."

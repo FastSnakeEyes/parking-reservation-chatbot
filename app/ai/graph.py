@@ -1,20 +1,24 @@
 """ParkingGraph: the whole customer conversation as one LangGraph workflow,
 one checkpointer thread per chat session ("chat:{session_id}").
 
-    START -> route_input -+-> agent ------------------------------------> END
-                          +-> book -> request_approval -> admin_decision -> record_decision -> END
+    START -> route_input -+-> agent ------------------------------------------> END
+                          +-> book -> admin_review -+-----------------> notify_customer -> END
+                          |                         +-> manual_review -^
                           +-> END   (notice / injection / cancel / nothing to confirm)
 
 - route_input: deterministic, model-free handling of the turn - the admin's
   decision notice, prompt injection, `cancel`, `confirm` (the model cannot
   authorize a DB write). Everything else goes to the user agent.
 - agent: the user agent (app/ai/agents.py) answers or prepares a review.
-- book -> request_approval -> admin_decision: on `confirm`, the reservation is
-  saved, the admin agent drafts the administrator's notification, and the
-  thread pauses at interrupt() until the admin API resumes it - so while a
-  reservation awaits approval, the conversation waits too.
-- record_decision: records the decision (MCP on approval) and leaves the
-  customer a notice for their next message.
+- book -> admin_review: on `confirm`, the reservation is saved and the
+  human-in-the-loop admin agent proposes recording it; its
+  HumanInTheLoopMiddleware pauses the whole thread until the admin API
+  resumes it (ParkingGraph.resume) - so while a reservation awaits approval,
+  the conversation waits too. Approved, the agent's tool records it (MCP);
+  rejected, the tool never runs and the reservation is marked rejected.
+- manual_review: the same pause, without the agent, if its model never
+  proposed the call - the administrator still gets a request to decide on.
+- notify_customer: leaves the customer a notice for their next message.
 
 The graph calls ParkingService (app/services/parking.py) for every DB/MCP
 side effect; the service never calls the graph. Per-request dependencies
@@ -24,8 +28,9 @@ arrive as runtime context (ChatContext).
 from typing import Annotated, Literal, NotRequired, TypedDict
 from uuid import UUID
 
+from langchain.agents.middleware.human_in_the_loop import ActionRequest, HITLRequest, ReviewConfig
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, RemoveMessage
+from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, RemoveMessage, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.errors import GraphRecursionError
@@ -38,8 +43,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.ai.agents import build_admin_agent, build_user_agent
 from app.ai.guardrails import is_prompt_injection
-from app.ai.parsers import parse_admin_reply
-from app.ai.tools import ChatContext, notify_admin
+from app.ai.tools import ChatContext, record_reservation
 from app.constants import (
     ADMIN_LOCK_WAIT_SECONDS,
     CHAT_LOCK_WAIT_SECONDS,
@@ -58,8 +62,7 @@ class ParkingState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
     draft: NotRequired[dict | None]  # set by prepare_reservation, consumed by `confirm`
     last_reservation_id: NotRequired[str | None]
-    admin_message: NotRequired[str | None]  # the admin agent's drafted notification
-    decision: NotRequired[str | None]  # an ApprovalDecision value
+    decision: NotRequired[str | None]  # an ApprovalDecision value, set by ParkingGraph.resume
     admin_note: NotRequired[str | None]
     reservation_status: NotRequired[str | None]  # a ReservationStatus value
     notice_pending: NotRequired[bool]  # the decision notice is still undelivered
@@ -69,6 +72,15 @@ def _reply(text: str, *, drop: str, **updates) -> Command:
     """End the turn answering `text`. `drop` removes the triggering human message
     (or, with REMOVE_ALL_MESSAGES, the whole conversation) from the history."""
     return Command(update={"messages": [RemoveMessage(id=drop), AIMessage(content=text)], **updates}, goto=END)
+
+
+def _review_request(description: str) -> HITLRequest:
+    """manual_review's interrupt, shaped like HumanInTheLoopMiddleware's so the
+    admin API reads and resumes both the same way."""
+    return HITLRequest(
+        action_requests=[ActionRequest(name=record_reservation.name, args={}, description=description)],
+        review_configs=[ReviewConfig(action_name=record_reservation.name, allowed_decisions=["approve", "reject"])],
+    )
 
 
 def _build_graph(llm: BaseChatModel, checkpointer: BaseCheckpointSaver):
@@ -83,7 +95,7 @@ def _build_graph(llm: BaseChatModel, checkpointer: BaseCheckpointSaver):
         text = str(question.content).strip()
 
         if state.get("notice_pending"):
-            # The decision notice is already the last message (record_decision);
+            # The decision notice is already the last message (notify_customer);
             # dropping the question makes it this turn's answer.
             return Command(update={"messages": [RemoveMessage(id=question.id)], "notice_pending": False}, goto=END)
 
@@ -136,7 +148,7 @@ def _build_graph(llm: BaseChatModel, checkpointer: BaseCheckpointSaver):
         state: ParkingState,
         runtime: Runtime[ChatContext],
         config: RunnableConfig,
-    ) -> Command[Literal["request_approval", "__end__"]]:
+    ) -> Command[Literal["admin_review", "__end__"]]:
         try:
             reservation_id = await runtime.context.parking_service.book(
                 state["draft"], conversation_id=config["configurable"]["thread_id"]
@@ -166,56 +178,72 @@ def _build_graph(llm: BaseChatModel, checkpointer: BaseCheckpointSaver):
                 "last_reservation_id": str(reservation_id),
                 "reservation_status": ReservationStatus.PENDING.value,
             },
-            goto="request_approval",
+            goto="admin_review",
         )
 
-    # -- Node: the admin agent drafts the approval-request message ---------- #
-    async def request_approval(state: ParkingState, runtime: Runtime[ChatContext]) -> dict:
+    async def _facts(state: ParkingState, runtime: Runtime[ChatContext]) -> str:
         facts = await runtime.context.parking_service.approval_facts(UUID(state["last_reservation_id"]))
-        request = "\n".join(f"{key}: {value}" for key, value in facts.items())
-        result = await admin_agent.ainvoke({"messages": [HumanMessage(f"New reservation request:\n{request}")]})
+        return "\n".join(f"{key}: {value}" for key, value in facts.items())
 
-        for message in result["messages"]:
-            for call in getattr(message, "tool_calls", None) or []:
-                if call["name"] == notify_admin.name:
-                    return {"admin_message": call["args"]["text"]}
+    # -- Node: the human-in-the-loop admin agent ---------------------------- #
+    async def admin_review(
+        state: ParkingState, runtime: Runtime[ChatContext]
+    ) -> Command[Literal["notify_customer", "manual_review"]]:
+        # Pauses inside admin_agent (HumanInTheLoopMiddleware) until the admin
+        # API resumes the thread; this node then re-runs and the agent picks up
+        # where it paused, so its model is not called again for the same request.
+        result = await admin_agent.ainvoke(
+            {
+                "messages": [HumanMessage(f"New reservation request:\n{await _facts(state, runtime)}")],
+                "reservation_id": state["last_reservation_id"],
+            },
+            context=runtime.context,
+        )
 
-        # The model skipped the tool: fall back to a plain request rather
-        # than leaving the administrator with nothing to decide on.
-        return {"admin_message": f"Please approve or refuse this reservation:\n{request}"}
+        reviewed = any(
+            isinstance(message, ToolMessage) and message.name == record_reservation.name
+            for message in result["messages"]
+        )
+        if not reviewed:
+            logger.warning("Admin agent never proposed %s; asking the administrator directly", record_reservation.name)
+            return Command(goto="manual_review")
 
-    # -- Node: wait for the administrator (human-in-the-loop) --------------- #
-    def admin_decision(state: ParkingState) -> Command[Literal["record_decision"]]:
-        # Pauses here until ParkingGraph.resume() - called by the admin API.
-        # Resume value: {"decision": an ApprovalDecision value, "note": str | None},
-        # or, for a future free-text channel, the administrator's raw reply.
-        reply = interrupt({"reservation_id": state["last_reservation_id"], "message": state["admin_message"]})
+        # Approved, record_reservation already recorded it; rejected, it never ran.
+        if state.get("decision") == ApprovalDecision.REJECTED:
+            await runtime.context.parking_service.record_decision(
+                UUID(state["last_reservation_id"]), approved=False, note=state.get("admin_note")
+            )
 
-        if isinstance(reply, dict):
-            decision, note = ApprovalDecision(reply["decision"]), reply.get("note")
-        else:
-            parsed = parse_admin_reply(llm, str(reply))
-            decision = ApprovalDecision.APPROVED if parsed.get("approved") else ApprovalDecision.REJECTED
-            note = parsed.get("reason") or None
+        return Command(goto="notify_customer")
 
-        return Command(goto="record_decision", update={"decision": decision.value, "admin_note": note})
+    # -- Node: the same pause, without the agent ---------------------------- #
+    async def manual_review(state: ParkingState, runtime: Runtime[ChatContext]) -> dict:
+        interrupt(_review_request(f"Please approve or refuse this reservation:\n{await _facts(state, runtime)}"))
 
-    # -- Node: persist the decision, recording approvals through MCP ------- #
-    async def record_decision(state: ParkingState, runtime: Runtime[ChatContext]) -> dict:
-        reservation_id = state["last_reservation_id"]
-        status = await runtime.context.parking_service.record_decision(
-            UUID(reservation_id),
-            approved=state["decision"] == ApprovalDecision.APPROVED,
+        await runtime.context.parking_service.record_decision(
+            UUID(state["last_reservation_id"]),
+            approved=state.get("decision") == ApprovalDecision.APPROVED,
             note=state.get("admin_note"),
         )
+        return {}
 
-        outcome = "approved and recorded" if status == ReservationStatus.RECORDED else "rejected by the administrator"
+    # -- Node: tell the customer the outcome on their next message ---------- #
+    async def notify_customer(state: ParkingState, runtime: Runtime[ChatContext]) -> dict:
+        reservation_id = state["last_reservation_id"]
+        status = await runtime.context.parking_service.get_status(UUID(reservation_id))
+
+        if status == ReservationStatus.RECORDED:
+            outcome = "approved and recorded"
+        elif status == ReservationStatus.REJECTED:
+            outcome = "rejected by the administrator"
+        else:
+            outcome = "reviewed, but could not be recorded yet - we will follow up"
+
         notice = f"Update: your reservation {reservation_id} was {outcome}.\nYou can ask your question again."
 
         return {
             "messages": [AIMessage(notice)],
-            "reservation_status": str(status),
-            "admin_message": None,
+            "reservation_status": str(status) if status else None,
             "decision": None,
             "admin_note": None,
             "notice_pending": True,
@@ -225,14 +253,14 @@ def _build_graph(llm: BaseChatModel, checkpointer: BaseCheckpointSaver):
     builder.add_node("route_input", route_input)
     builder.add_node("agent", agent)
     builder.add_node("book", book)
-    builder.add_node("request_approval", request_approval)
-    builder.add_node("admin_decision", admin_decision)
-    builder.add_node("record_decision", record_decision)
+    builder.add_node("admin_review", admin_review)
+    builder.add_node("manual_review", manual_review)
+    builder.add_node("notify_customer", notify_customer)
 
     builder.add_edge(START, "route_input")
     builder.add_edge("agent", END)
-    builder.add_edge("request_approval", "admin_decision")
-    builder.add_edge("record_decision", END)
+    builder.add_edge("manual_review", "notify_customer")
+    builder.add_edge("notify_customer", END)
 
     return builder.compile(checkpointer=checkpointer)
 
@@ -259,11 +287,16 @@ class ParkingGraph:
         )
 
     async def _waiting_for(self, thread_id: str) -> dict | None:
-        """The pending admin_decision interrupt's payload, if the thread is paused there."""
+        """{"reservation_id", "message"} if the thread is paused for the
+        administrator's review (HumanInTheLoopMiddleware's or manual_review's
+        interrupt - both shaped as an HITLRequest)."""
         snapshot = await self.graph.aget_state(self._config(thread_id))
         for task in snapshot.tasks:
             for pending in task.interrupts:
-                return pending.value
+                return {
+                    "reservation_id": snapshot.values.get("last_reservation_id"),
+                    "message": pending.value["action_requests"][0]["description"],
+                }
         return None
 
     async def chat(self, session_id: str, question: str, context: ChatContext) -> dict:
@@ -306,7 +339,7 @@ class ParkingGraph:
         }
 
     async def pending_message(self, thread_id: str) -> str | None:
-        """The administrator's drafted notification, read back from the paused
+        """The request the administrator reviews, read back from the paused
         interrupt rather than drafted again on every admin console poll."""
         waiting = await self._waiting_for(thread_id)
         return waiting["message"] if waiting else None
@@ -327,9 +360,20 @@ class ParkingGraph:
             if waiting is None or waiting["reservation_id"] != str(reservation_id):
                 raise LookupError(reservation_id)
 
+            decision = ApprovalDecision(decision)
+            if decision == ApprovalDecision.APPROVED:
+                review = {"type": "approve"}
+            else:
+                review = {"type": "reject", "message": note or "Rejected by the administrator."}
+
             logger.info("Resuming conversation for reservation %s with decision=%s", reservation_id, decision)
             result = await self.graph.ainvoke(
-                Command(resume={"decision": ApprovalDecision(decision).value, "note": note}),
+                # resume answers the HumanInTheLoopMiddleware interrupt; update
+                # records the decision for the nodes that act on it.
+                Command(
+                    resume={"decisions": [review]},
+                    update={"decision": decision.value, "admin_note": note},
+                ),
                 config=self._config(thread_id),
                 context=context,
                 durability="exit",

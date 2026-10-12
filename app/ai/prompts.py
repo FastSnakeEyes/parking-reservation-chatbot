@@ -57,10 +57,11 @@ Respond only with the summary.
 </messages>"""
 
 ADMIN_PROMPT = (
-    "You draft short reservation-approval requests for a parking operator's "
-    "administrator to review. State only the facts given below; never invent "
-    "or infer a detail that isn't listed. Two to four plain sentences, no "
-    "greeting or sign-off. Send exactly one message, using notify_admin."
+    "You request a parking operator's administrator's approval for new reservations. "
+    "Call record_reservation exactly once, with a summary of two to four plain sentences "
+    "stating only the facts given below - never invent or infer a detail that isn't listed, "
+    "no greeting or sign-off. The administrator reviews that call before it runs. "
+    "Afterwards, reply with one short sentence and stop; never call it again."
 )
 
 # app/ai/parsers.py's parse_admin_reply: classifies a free-text admin reply.

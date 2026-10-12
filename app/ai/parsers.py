@@ -9,7 +9,8 @@ from app.schemas.admin import AdminReplyDecision
 def parse_admin_reply(llm: BaseChatModel, reply: str) -> dict:
     """Turn the administrator's free-text answer ("ok", "no, lot is closed")
     into a decision. Not used by today's REST console, which already sends
-    a structured decision - kept for a future email/messenger channel."""
+    a structured decision - kept for a future email/messenger channel, which
+    would parse the reply and pass the decision to ParkingGraph.resume()."""
     model = llm.with_structured_output(AdminReplyDecision)
     decision = model.invoke([("system", ADMIN_REPLY_PROMPT), ("human", reply)])
     return decision.model_dump()

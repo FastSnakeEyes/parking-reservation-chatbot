@@ -41,16 +41,20 @@ never calls the graph.
    anything else goes to the user agent, which answers from Milvus/Postgres or collects booking
    details and shows a review, asking the user to `confirm`.
 2. On `confirm`, the `book` node calls `ParkingService.book()`: the reservation is saved with
-   `status="pending"` and its `conversation_id`. The admin agent drafts a notification, and the
-   conversation pauses at `admin_decision` (an `interrupt()`, persisted by the checkpointer so it
-   survives a restart). `/chat` answers `status: "waiting_for_admin"` until the admin decides.
-3. The administrator polls `GET /admin/reservations` (via `ui/admin_app.py`) and approves or
-   rejects. `POST /admin/reservations/{id}/decision` looks up the reservation's
-   `conversation_id` and resumes that conversation with the decision (`ParkingGraph.resume()`).
-4. On approval, the `record_decision` node calls `ParkingService.record_decision()`, which calls
+   `status="pending"` and its `conversation_id`. The `admin_review` node then runs the
+   **human-in-the-loop admin agent**: it proposes a `record_reservation` call whose summary
+   describes the reservation, and LangChain's `HumanInTheLoopMiddleware` pauses on that call -
+   and with it the whole conversation (persisted by the checkpointer, so it survives a restart).
+   `/chat` answers `status: "waiting_for_admin"` until the admin decides.
+3. The administrator polls `GET /admin/reservations` (via `ui/admin_app.py`), sees the agent's
+   summary, and approves or rejects. `POST /admin/reservations/{id}/decision` looks up the
+   reservation's `conversation_id` and resumes that conversation (`ParkingGraph.resume()`) with
+   an approve/reject decision for the paused call.
+4. Approved, the agent's `record_reservation` tool runs: `ParkingService.record_decision()` calls
    the MCP server's `record_reservation` tool (writes
    `Name | Car Number | Reservation Period | Approval Time` to a file) and sets the
-   reservation's status to `recorded`; on rejection it's set to `rejected`.
+   reservation's status to `recorded`. Rejected, the tool never runs and the reservation is set
+   to `rejected`.
 5. The customer's next message in that session is answered with the approved/rejected notice.
 
 ## Prerequisites

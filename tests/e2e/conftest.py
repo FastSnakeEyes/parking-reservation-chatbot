@@ -12,7 +12,7 @@ from collections.abc import Iterator
 
 import httpx
 import pytest
-from app.ai.tools import notify_admin
+from app.ai.tools import record_reservation
 from app.config import settings
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
@@ -32,14 +32,15 @@ class ScriptedModel(FakeMessagesListChatModel):
         return self
 
 
-# The admin agent's turn: the notify_admin draft, then - since create_agent
-# calls the model again after the tool runs - a tool-call-free closing message.
+# The admin agent's turn: it proposes record_reservation, which pauses for the
+# administrator's review; once resumed, create_agent calls the model again,
+# so a tool-call-free closing message ends its loop.
 ADMIN_TURN = [
     AIMessage(
         content="",
-        tool_calls=[{"name": notify_admin.name, "args": {"text": ADMIN_DRAFT_MESSAGE}, "id": "call_1"}],
+        tool_calls=[{"name": record_reservation.name, "args": {"summary": ADMIN_DRAFT_MESSAGE}, "id": "call_1"}],
     ),
-    AIMessage(content="Done, I've notified the administrator."),
+    AIMessage(content="Done."),
 ]
 
 

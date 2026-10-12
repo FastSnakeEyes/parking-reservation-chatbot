@@ -1,8 +1,8 @@
 """Stage 2: REST API for the administrator to review and decide on pending
 reservations. ui/admin_app.py (Streamlit) is the console that calls this.
 
-A submitted reservation's conversation waits at ParkingGraph's
-admin_decision interrupt; a decision resumes that conversation's thread.
+A submitted reservation's conversation waits for the human-in-the-loop admin
+agent's review (app/ai/graph.py); a decision resumes that conversation's thread.
 """
 
 from uuid import UUID
