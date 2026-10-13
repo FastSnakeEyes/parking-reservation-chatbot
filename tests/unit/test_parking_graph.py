@@ -9,7 +9,7 @@ import pytest
 from app.ai import graph as graph_module
 from app.ai.graph import ParkingGraph
 from app.ai.token_counting import get_token_counter
-from app.ai.tools import ChatContext, approve_reservation
+from app.ai.tools import ChatContext, request_admin_approval
 from app.config import settings
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
@@ -31,13 +31,12 @@ BOOKING_ARGS = {
 }
 
 PREPARE = AIMessage(content="", tool_calls=[{"name": "prepare_reservation", "args": BOOKING_ARGS, "id": "c1"}])
-# The admin agent's turn: it proposes approve_reservation (paused for the
-# administrator's review), then, once resumed, a closing message.
+# The admin agent's only model call: it proposes request_admin_approval (paused
+# for the administrator's review); no closing call follows the decision.
 ADMIN_DRAFT = [
     AIMessage(
-        content="", tool_calls=[{"name": approve_reservation.name, "args": {"summary": "Approve Jane?"}, "id": "a1"}]
+        content="", tool_calls=[{"name": request_admin_approval.name, "args": {"summary": "Approve Jane?"}, "id": "a1"}]
     ),
-    AIMessage(content="Done."),
 ]
 
 
@@ -213,18 +212,22 @@ async def test_a_rejected_review_never_runs_the_tool(lock_redis, parking_service
 
 
 @pytest.mark.asyncio
-async def test_the_admin_agent_is_forced_to_request_approval_only_once(lock_redis, parking_service):
+@pytest.mark.parametrize("decision", ["approved", "rejected"])
+async def test_the_admin_agent_makes_exactly_one_forced_model_call(lock_redis, parking_service, decision):
     model = ScriptedModel(responses=[PREPARE, *ADMIN_DRAFT])
     parking_graph = ParkingGraph(model, InMemorySaver(), lock_redis)
 
     await _chat(parking_graph, parking_service, "book it")
     await _chat(parking_graph, parking_service, "confirm")
     reservation_id, _ = parking_service.booked[0]
-    await parking_graph.resume(THREAD, reservation_id, "approved", None, ChatContext(parking_service=parking_service))
+    status = await parking_graph.resume(
+        THREAD, reservation_id, decision, None, ChatContext(parking_service=parking_service)
+    )
 
-    # user agent's turn, then the admin agent's first call (forced) and its
-    # closing call after the decision (free - forcing it would loop forever).
-    assert model.tool_choices == [None, approve_reservation.name, None]
+    # The user agent's turn, then the admin agent's single, forced call - none
+    # after the decision (return_direct on approval, end_after_rejection on rejection).
+    assert model.tool_choices == [None, request_admin_approval.name]
+    assert status == decision
 
 
 @pytest.mark.asyncio

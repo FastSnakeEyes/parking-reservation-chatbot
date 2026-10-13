@@ -12,7 +12,7 @@ Engineering: Fast Track" course assignment described in [`docs/SPECIFICATION.md`
 | --- | --- | --- |
 | 1. RAG chatbot | `langchain.agents.create_agent` user agent over a hybrid store: Milvus for static docs (general info, rules, booking process, per-car-park pages), Postgres for dynamic data (hours, prices, capacity, reservations) | `app/ai/agents.py`, `app/ai/tools.py`, `app/db/` |
 | 1. Guardrails | `PIIMiddleware` redacts contact/payment data everywhere and other customers' names/car numbers from tool results; Presidio+spaCy keeps PII out of vector-search queries and the ingested docs; optional transformer-based prompt-injection screening. The operator's own published contacts (`PUBLIC_CONTACTS`) are never redacted | `app/ai/guardrails.py` |
-| 2. Human-in-the-loop admin agent | A second `create_agent` proposes an `approve_reservation` call; LangChain's `HumanInTheLoopMiddleware` pauses on it until the administrator approves or rejects it through the REST API (web page or Streamlit console) | `app/ai/agents.py`, `app/api/routers/admin.py`, `ui/admin_app.py` |
+| 2. Human-in-the-loop admin agent | A second `create_agent` proposes an `request_admin_approval` call; LangChain's `HumanInTheLoopMiddleware` pauses on it until the administrator approves or rejects it through the REST API (web page or Streamlit console) | `app/ai/agents.py`, `app/api/routers/admin.py`, `ui/admin_app.py` |
 | 3. MCP server | Standalone server (streamable-HTTP, bearer-token auth) exposing one tool, `record_reservation`, which appends approved reservations to a file | `mcp_server/server.py` |
 | 4. LangGraph orchestration | `ParkingGraph`: `user_agent → admin → record → notification`, one Postgres-checkpointed thread per chat session, so a conversation paused for approval survives restarts | `app/ai/graph.py` |
 
@@ -49,7 +49,7 @@ START -> user_agent -+-> admin -> record -> notification -> END   (after `confir
    `cancel` works too.
 2. On `confirm`, `user_agent` calls `ParkingService.book()`: the reservation is saved with
    `status="pending"` and its `conversation_id`. The `admin` node then runs the
-   **human-in-the-loop admin agent**: it is made to propose an `approve_reservation` call whose
+   **human-in-the-loop admin agent**: it is made to propose an `request_admin_approval` call whose
    summary describes the reservation, and LangChain's `HumanInTheLoopMiddleware` pauses on that
    call - and with it the whole conversation (persisted by the checkpointer, so it survives a
    restart). `/chat` answers `status: "waiting_for_admin"` until the admin decides.

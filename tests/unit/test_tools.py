@@ -5,10 +5,10 @@ The graph tests' fake models skip bind_tools, so an unresolvable annotation
 fails against a real model - this catches it without one."""
 
 import pytest
-from app.ai.tools import approve_reservation, create_parking_tools
+from app.ai.tools import create_parking_tools, request_admin_approval
 from langchain_core.utils.function_calling import convert_to_openai_tool
 
-TOOLS = [*create_parking_tools(), approve_reservation]
+TOOLS = [*create_parking_tools(), request_admin_approval]
 
 
 @pytest.mark.parametrize("tool", TOOLS, ids=lambda tool: tool.name)

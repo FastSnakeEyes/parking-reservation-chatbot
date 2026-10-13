@@ -217,14 +217,19 @@ def create_parking_tools() -> list[BaseTool]:
 # --------------------------------------------------------------------------- #
 # Admin agent tools
 # --------------------------------------------------------------------------- #
-@tool
-def approve_reservation(summary: str) -> str:
-    """Ask the administrator to approve the reservation under review.
+# return_direct: once approved, the admin agent's turn is over - no further model call.
+@tool(return_direct=True)
+def request_admin_approval(summary: str) -> str:
+    """Ask the administrator to approve or reject the reservation under review.
 
     Args:
         summary: Two to four plain sentences describing the reservation for the administrator.
     """
-    # Paused by HumanInTheLoopMiddleware until the administrator decides; it only
-    # runs once approved. The decision itself is acted on by ParkingGraph's
-    # `record` node, not here.
+    # The call itself is the approval request: HumanInTheLoopMiddleware pauses it
+    # before this body runs and shows `summary` to the administrator (the admin
+    # agent's _review_description -> ParkingGraph.pending_message -> the admin
+    # console). This body only runs once they approve; rejected, it never runs.
+    # The decision itself is acted on by ParkingGraph's `record` node, not here.
+    # (Not in the docstring: that is the tool description the model sees.)
+    logger.info("Administrator approved reservation request: %s", summary)
     return "The administrator approved the reservation."

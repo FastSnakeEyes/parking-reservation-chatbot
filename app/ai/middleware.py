@@ -5,10 +5,10 @@ from datetime import datetime
 from zoneinfo import ZoneInfo
 
 from langchain.agents.middleware import ModelRequest, ModelResponse, dynamic_prompt, wrap_model_call
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, ToolMessage
 
 from app.ai.prompts import SYSTEM_PROMPT
-from app.ai.tools import approve_reservation
+from app.ai.tools import request_admin_approval
 from app.config import settings
 
 
@@ -24,9 +24,23 @@ def current_time_prompt(_request: ModelRequest) -> str:
 async def force_approval_request(
     request: ModelRequest, handler: Callable[[ModelRequest], Awaitable[ModelResponse]]
 ) -> ModelResponse:
-    """The admin agent's first model call must propose approve_reservation, so
+    """The admin agent's first model call must propose request_admin_approval, so
     every reservation reaches the administrator's review. Later calls (after the
     decision) are left free - forcing those would loop forever."""
     if not any(isinstance(message, AIMessage) for message in request.messages):
-        request = request.override(tool_choice=approve_reservation.name)
+        request = request.override(tool_choice=request_admin_approval.name)
+    return await handler(request)
+
+
+@wrap_model_call
+async def end_after_rejection(
+    request: ModelRequest, handler: Callable[[ModelRequest], Awaitable[ModelResponse]]
+) -> ModelResponse:
+    """After the administrator rejects the request, the admin agent's turn is
+    over: answer with a fixed closing message instead of calling the model.
+    (An approval needs no counterpart - request_admin_approval returns directly.)"""
+    last = request.messages[-1] if request.messages else None
+    if isinstance(last, ToolMessage) and last.name == request_admin_approval.name and last.status == "error":
+        # HumanInTheLoopMiddleware's rejection: the tool never ran.
+        return ModelResponse(result=[AIMessage("The administrator rejected the reservation.")])
     return await handler(request)

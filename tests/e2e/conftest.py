@@ -12,7 +12,7 @@ from collections.abc import Iterator
 
 import httpx
 import pytest
-from app.ai.tools import approve_reservation
+from app.ai.tools import request_admin_approval
 from app.config import settings
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
@@ -32,15 +32,14 @@ class ScriptedModel(FakeMessagesListChatModel):
         return self
 
 
-# The admin agent's turn: it proposes approve_reservation, which pauses for the
-# administrator's review; once resumed, create_agent calls the model again,
-# so a tool-call-free closing message ends its loop.
+# The admin agent's only model call: it proposes request_admin_approval, which
+# pauses for the administrator's review. After the decision the agent ends
+# without calling the model again.
 ADMIN_TURN = [
     AIMessage(
         content="",
-        tool_calls=[{"name": approve_reservation.name, "args": {"summary": ADMIN_DRAFT_MESSAGE}, "id": "call_1"}],
+        tool_calls=[{"name": request_admin_approval.name, "args": {"summary": ADMIN_DRAFT_MESSAGE}, "id": "call_1"}],
     ),
-    AIMessage(content="Done."),
 ]
 
 

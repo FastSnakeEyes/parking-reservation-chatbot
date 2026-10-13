@@ -9,7 +9,7 @@ conversation's persistence and workflow:
    rather than the model's retelling. PII redaction and history
    summarization are its middleware.
 2. The admin agent (`build_admin_agent`) is the human-in-the-loop agent:
-   it proposes an `approve_reservation` call whose summary describes the
+   it proposes an `request_admin_approval` call whose summary describes the
    reservation, and HumanInTheLoopMiddleware pauses on it until the
    administrator approves or rejects it through the admin API
    (app/api/routers/admin.py, ui/admin_app.py). ParkingGraph's `record`
@@ -24,10 +24,10 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import ToolCall
 
 from app.ai.guardrails import pii_middleware
-from app.ai.middleware import current_time_prompt, force_approval_request
+from app.ai.middleware import current_time_prompt, end_after_rejection, force_approval_request
 from app.ai.prompts import ADMIN_PROMPT, SUMMARY_PROMPT
 from app.ai.token_counting import count_tokens
-from app.ai.tools import ChatContext, approve_reservation, create_parking_tools
+from app.ai.tools import ChatContext, create_parking_tools, request_admin_approval
 from app.config import settings
 
 
@@ -74,13 +74,16 @@ def build_admin_agent(llm: BaseChatModel):
     conversation until ParkingGraph.resume() delivers the decision."""
     return create_agent(
         model=llm,
-        tools=[approve_reservation],
+        tools=[request_admin_approval],
         system_prompt=ADMIN_PROMPT,
         middleware=[
+            # Exactly one model call per review: forced to request approval,
+            # then never called again (return_direct / end_after_rejection).
             force_approval_request,
+            end_after_rejection,
             HumanInTheLoopMiddleware(
                 interrupt_on={
-                    approve_reservation.name: {
+                    request_admin_approval.name: {
                         "allowed_decisions": ["approve", "reject"],
                         "description": _review_description,
                     }
