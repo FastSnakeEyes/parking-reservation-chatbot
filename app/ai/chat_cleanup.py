@@ -8,38 +8,23 @@ Only `chat:`-prefixed threads are touched, and never one still waiting for
 an administrator's decision on its reservation. Each thread is deleted under
 the same lock chat turns hold (ParkingGraph.lock), after re-checking it is
 still idle, so a turn that starts at the cutoff can't lose its history.
+
+Which threads are idle comes from ChatThreadRepository
+(app/db/repositories/chat_thread.py); this module only orchestrates.
 """
 
 import asyncio
 from collections.abc import Callable
+from datetime import UTC, datetime, timedelta
 
-import sqlalchemy as sa
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from sqlalchemy.ext.asyncio import AsyncEngine
+from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession
 
 from app.config import settings
-from app.constants import CHAT_THREAD_PREFIX
+from app.db.repositories.chat_thread import ChatThreadRepository
 from app.logger import get_logger
 
 logger = get_logger(__name__)
-
-# A thread is idle when even its newest checkpoint is older than the cutoff.
-# Threads paused for an administrator's decision are kept however long it takes:
-# the admin API resumes them by reservations.conversation_id.
-_IDLE_THREADS = """
-    SELECT thread_id
-    FROM checkpoints
-    WHERE thread_id LIKE :prefix {only_thread}
-      AND thread_id NOT IN (
-          SELECT conversation_id FROM reservations
-          WHERE status = 'pending' AND conversation_id IS NOT NULL
-      )
-    GROUP BY thread_id
-    HAVING max((checkpoint ->> 'ts')::timestamptz) < now() - make_interval(secs => :idle_seconds)
-"""
-IDLE_THREADS_SQL = sa.text(_IDLE_THREADS.format(only_thread=""))
-# The same check for one thread, repeated under its lock just before deleting it.
-STILL_IDLE_SQL = sa.text(_IDLE_THREADS.format(only_thread="AND thread_id = :thread_id"))
 
 
 async def delete_idle_chat_threads(
@@ -51,25 +36,24 @@ async def delete_idle_chat_threads(
     """Delete idle chat threads; returns how many. `thread_lock` is
     ParkingGraph.lock: a thread whose lock is held (a turn is running) is
     skipped until the next sweep."""
-    params = {"prefix": f"{CHAT_THREAD_PREFIX}%", "idle_seconds": idle_seconds}
+    cutoff = datetime.now(UTC) - timedelta(seconds=idle_seconds)
 
-    async with engine.connect() as conn:
-        thread_ids = (await conn.execute(IDLE_THREADS_SQL, params)).scalars().all()
+    async with AsyncSession(engine) as session:
+        threads = ChatThreadRepository(session)
+        thread_ids = await threads.idle_thread_ids(cutoff)
 
-    deleted = 0
-    for thread_id in thread_ids:
-        lock = thread_lock(thread_id)
-        if not await lock.acquire(blocking=False):
-            continue
+        deleted = 0
+        for thread_id in thread_ids:
+            lock = thread_lock(thread_id)
+            if not await lock.acquire(blocking=False):
+                continue
 
-        try:
-            async with engine.connect() as conn:
-                still_idle = (await conn.execute(STILL_IDLE_SQL, {**params, "thread_id": thread_id})).first()
-            if still_idle:
-                await checkpointer.adelete_thread(thread_id)
-                deleted += 1
-        finally:
-            await lock.release()
+            try:
+                if await threads.is_idle(thread_id, cutoff):
+                    await checkpointer.adelete_thread(thread_id)
+                    deleted += 1
+            finally:
+                await lock.release()
 
     if deleted:
         logger.info("Deleted %d idle chat threads", deleted)
