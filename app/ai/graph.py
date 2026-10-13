@@ -193,7 +193,7 @@ def _build_graph(llm: BaseChatModel, checkpointer: BaseCheckpointSaver):
     # -- Node: tell the customer the outcome on their next message ---------- #
     def notification(state: ParkingState) -> dict:
         outcomes = {
-            ReservationStatus.RECORDED: "approved and recorded",
+            ReservationStatus.APPROVED: "approved",
             ReservationStatus.REJECTED: "rejected by the administrator",
         }
         outcome = outcomes.get(
@@ -295,6 +295,44 @@ class ParkingGraph:
         return {
             "status": ChatStatus.WAITING_FOR_ADMIN if result.get("__interrupt__") else ChatStatus.COMPLETE,
             "answer": _text(result["messages"][-1].content),
+            # A reviewed booking is waiting for the customer's `confirm`.
+            "awaiting_confirmation": result.get("draft") is not None,
+        }
+
+    async def updates(self, session_id: str) -> dict:
+        """What the chat page polls while a reservation awaits approval:
+        {"status", "notice", "reservation_status"}. The decision notice is
+        returned once and then marked delivered, so the customer's next message
+        goes to the user agent instead of being answered with it again."""
+        thread_id = self.thread_id(session_id)
+        config = self._config(thread_id)
+
+        if await self._waiting_for(thread_id) is not None:
+            return {"status": ChatStatus.WAITING_FOR_ADMIN, "notice": None, "reservation_status": None}
+
+        snapshot = await self.graph.aget_state(config)
+        if not snapshot.values.get("notice_pending"):
+            return {"status": ChatStatus.COMPLETE, "notice": None, "reservation_status": None}
+
+        lock = self._lock(thread_id, blocking_timeout=CHAT_LOCK_WAIT_SECONDS)
+        if not await lock.acquire():
+            # A chat turn is running - it delivers the notice itself; poll again.
+            return {"status": ChatStatus.COMPLETE, "notice": None, "reservation_status": None}
+
+        try:
+            snapshot = await self.graph.aget_state(config)  # re-read under the lock
+            if not snapshot.values.get("notice_pending"):
+                return {"status": ChatStatus.COMPLETE, "notice": None, "reservation_status": None}
+
+            # As if written by `notification`, so the thread still ends there.
+            await self.graph.aupdate_state(config, {"notice_pending": False}, as_node="notification")
+        finally:
+            await lock.release()
+
+        return {
+            "status": ChatStatus.COMPLETE,
+            "notice": _text(snapshot.values["messages"][-1].content),
+            "reservation_status": snapshot.values.get("reservation_status"),
         }
 
     async def pending_message(self, thread_id: str) -> str | None:

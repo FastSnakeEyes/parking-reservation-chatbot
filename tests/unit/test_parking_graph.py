@@ -86,7 +86,7 @@ class FakeService:
 
     async def record_decision(self, reservation_id, *, approved, note=None):
         self.recorded.append((reservation_id, approved))
-        return "recorded" if approved else "rejected"
+        return "approved" if approved else "rejected"
 
 
 @pytest.fixture(autouse=True)
@@ -122,7 +122,7 @@ async def test_history_persists_across_turns(lock_redis, parking_service):
     await _chat(parking_graph, parking_service, "hi")
     result = await _chat(parking_graph, parking_service, "are you there?")
 
-    assert result == {"status": "complete", "answer": "Still here."}
+    assert result == {"status": "complete", "answer": "Still here.", "awaiting_confirmation": False}
     assert await _messages(parking_graph) == ["hi", "Hello!", "are you there?", "Still here."]
 
 
@@ -133,11 +133,13 @@ async def test_booking_waits_for_the_admin_then_delivers_the_decision(lock_redis
     review = await _chat(parking_graph, parking_service, "book it")
     assert review["status"] == "complete"
     assert review["answer"].startswith("Please review your reservation request:")
+    assert review["awaiting_confirmation"] is True  # the chat page shows Confirm / Cancel
 
     confirmed = await _chat(parking_graph, parking_service, "confirm")
     reservation_id, conversation_id = parking_service.booked[0]
     assert conversation_id == THREAD
     assert confirmed["status"] == "waiting_for_admin"
+    assert confirmed["awaiting_confirmation"] is False
     assert str(reservation_id) in confirmed["answer"]
     assert await parking_graph.pending_message(THREAD) == "Approve Jane?"
 
@@ -149,7 +151,7 @@ async def test_booking_waits_for_the_admin_then_delivers_the_decision(lock_redis
     status = await parking_graph.resume(
         THREAD, reservation_id, "approved", None, ChatContext(parking_service=parking_service)
     )
-    assert status == "recorded"
+    assert status == "approved"
     assert parking_service.recorded == [(reservation_id, True)]
     assert await parking_graph.pending_message(THREAD) is None
 
@@ -163,6 +165,32 @@ async def test_booking_waits_for_the_admin_then_delivers_the_decision(lock_redis
 
     again = await _chat(parking_graph, parking_service, "confirm")
     assert "already submitted" in again["answer"]
+
+
+@pytest.mark.asyncio
+async def test_updates_deliver_the_decision_once_for_the_popup(lock_redis, parking_service):
+    parking_graph = _graph(lock_redis, PREPARE, *ADMIN_DRAFT, AIMessage(content="Anything else?"))
+
+    assert (await parking_graph.updates(SESSION))["notice"] is None  # nothing to wait for yet
+
+    await _chat(parking_graph, parking_service, "book it")
+    await _chat(parking_graph, parking_service, "confirm")
+    reservation_id, _ = parking_service.booked[0]
+
+    waiting = await parking_graph.updates(SESSION)
+    assert waiting == {"status": "waiting_for_admin", "notice": None, "reservation_status": None}
+
+    await parking_graph.resume(THREAD, reservation_id, "approved", None, ChatContext(parking_service=parking_service))
+
+    decided = await parking_graph.updates(SESSION)
+    assert decided["status"] == "complete"
+    assert decided["reservation_status"] == "approved"
+    assert decided["notice"].startswith(f"Update: your reservation {reservation_id} was approved")
+
+    # Delivered once: the next poll has nothing, and the next message reaches the agent.
+    assert (await parking_graph.updates(SESSION))["notice"] is None
+    after = await _chat(parking_graph, parking_service, "thanks")
+    assert after["answer"] == "Anything else?"
 
 
 @pytest.mark.asyncio

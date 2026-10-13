@@ -8,6 +8,12 @@ function initializeChat() {
   const messages = document.getElementById("messages");
   const statusElement = document.getElementById("status");
   const suggestions = document.querySelectorAll(".suggestion");
+  const decisionDialog = document.getElementById("decision-dialog");
+  const decisionTitle = document.getElementById("decision-title");
+  const decisionText = document.getElementById("decision-text");
+
+  // How often the page asks whether the administrator has decided.
+  const UPDATES_POLL_MS = 5000;
 
   const requiredElements = {
     form,
@@ -15,7 +21,10 @@ function initializeChat() {
     sendButton,
     resetButton,
     messages,
-    statusElement
+    statusElement,
+    decisionDialog,
+    decisionTitle,
+    decisionText
   };
 
   const missingElements = Object.entries(requiredElements)
@@ -47,6 +56,37 @@ function initializeChat() {
     statusElement.textContent = value
       ? "Assistant is processing your message…"
       : "";
+  }
+
+  // Confirm / Cancel under a reservation review. Any later message makes the
+  // review stale (the backend drops its draft), so the buttons are removed then.
+  function removeReviewActions() {
+    for (const actions of messages.querySelectorAll(".review-actions")) {
+      actions.remove();
+    }
+  }
+
+  function appendReviewActions() {
+    const article = messages.lastElementChild;
+
+    const actions = document.createElement("div");
+    actions.className = "review-actions";
+
+    const confirmButton = document.createElement("button");
+    confirmButton.type = "button";
+    confirmButton.className = "primary-button";
+    confirmButton.textContent = "Confirm";
+    confirmButton.addEventListener("click", () => void sendMessage("confirm"));
+
+    const cancelButton = document.createElement("button");
+    cancelButton.type = "button";
+    cancelButton.className = "secondary-button";
+    cancelButton.textContent = "Cancel";
+    cancelButton.addEventListener("click", () => void clearConversation());
+
+    actions.append(confirmButton, cancelButton);
+    article.appendChild(actions);
+    messages.scrollTop = messages.scrollHeight;
   }
 
   function appendMessage(role, text, sources = []) {
@@ -137,6 +177,71 @@ function initializeChat() {
     }
   }
 
+  const DECISION_TITLES = {
+    approved: "Reservation approved",
+    rejected: "Reservation rejected"
+  };
+
+  function showDecision(notice, reservationStatus) {
+    decisionDialog.classList.remove("approved", "rejected");
+
+    if (reservationStatus === "approved") {
+      decisionDialog.classList.add("approved");
+    } else if (reservationStatus === "rejected") {
+      decisionDialog.classList.add("rejected");
+    }
+
+    decisionTitle.textContent =
+      DECISION_TITLES[reservationStatus] || "Reservation update";
+    // Server text, rendered as text - never as HTML.
+    decisionText.textContent = notice;
+
+    if (!decisionDialog.open) {
+      decisionDialog.showModal();
+    }
+  }
+
+  let pollTimer = null;
+
+  function schedulePoll() {
+    if (pollTimer === null) {
+      pollTimer = window.setTimeout(pollUpdates, UPDATES_POLL_MS);
+    }
+  }
+
+  // While a reservation awaits approval, ask every few seconds whether the
+  // administrator has decided; show the outcome as soon as it arrives.
+  async function pollUpdates() {
+    pollTimer = null;
+
+    try {
+      const response = await fetch("/chat/updates", {
+        credentials: "same-origin",
+        cache: "no-store"
+      });
+
+      if (!response.ok) {
+        // e.g. no cookie yet - nothing to wait for.
+        return;
+      }
+
+      const update = await response.json();
+
+      if (typeof update.notice === "string") {
+        appendMessage("assistant", update.notice);
+        showDecision(update.notice, update.reservation_status);
+        return;
+      }
+
+      if (update.status === "waiting_for_admin") {
+        schedulePoll();
+      }
+    } catch {
+      // Network hiccup: keep waiting rather than give up.
+      schedulePoll();
+    }
+  }
+
   function showError(error) {
     const text = error.name === "AbortError"
       ? (
@@ -162,6 +267,7 @@ function initializeChat() {
       return;
     }
 
+    removeReviewActions();
     appendMessage("user", question);
     input.value = "";
     setBusy(true);
@@ -173,6 +279,14 @@ function initializeChat() {
         result.answer,
         result.sources
       );
+
+      if (result.awaiting_confirmation) {
+        appendReviewActions();
+      }
+
+      if (result.status === "waiting_for_admin") {
+        schedulePoll();
+      }
     } catch (error) {
       showError(error);
     } finally {
@@ -206,7 +320,10 @@ function initializeChat() {
     });
   }
 
-  resetButton.addEventListener("click", async () => {
+  // A decision may have arrived while the page was closed or reloading.
+  void pollUpdates();
+
+  async function clearConversation() {
     if (busy) {
       return;
     }
@@ -230,7 +347,9 @@ function initializeChat() {
       setBusy(false);
       input.focus();
     }
-  });
+  }
+
+  resetButton.addEventListener("click", () => void clearConversation());
 }
 
 if (document.readyState === "loading") {

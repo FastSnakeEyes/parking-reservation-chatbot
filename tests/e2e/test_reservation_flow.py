@@ -75,8 +75,8 @@ async def test_approval_records_reservation_via_mcp_server(
         )
         stored = await session.get(Reservation, reservation.id, populate_existing=True)
 
-    assert status == "recorded"
-    assert stored.status == "recorded"
+    assert status == "approved"
+    assert stored.status == "approved"
     assert stored.approved_at is not None
 
     contents = mcp_settings["file"].read_text()

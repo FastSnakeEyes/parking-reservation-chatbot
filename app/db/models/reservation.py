@@ -81,14 +81,14 @@ class Reservation(Base):
         sa.CheckConstraint(
             """
             status IN (
-                'pending', 'approved', 'rejected', 'cancelled', 'recorded'
+                'pending', 'approved', 'rejected', 'cancelled'
             )
             """,
             name="ck_reservations_status",
         ),
         sa.CheckConstraint(
             """
-            status NOT IN ('approved', 'recorded')
+            status <> 'approved'
             OR approved_at IS NOT NULL
             """,
             name="ck_reservations_approval",

@@ -32,4 +32,4 @@ class AdminReplyDecision(BaseModel):
 
 
 class DecisionResponse(BaseModel):
-    status: ReservationStatus  # RECORDED or REJECTED
+    status: ReservationStatus  # APPROVED or REJECTED

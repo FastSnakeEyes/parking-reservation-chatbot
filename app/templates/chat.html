@@ -8,11 +8,11 @@
 
   <link
     rel="stylesheet"
-    href="{{ url_for('static', path='/chat.css') }}?v=4"
+    href="{{ url_for('static', path='/chat.css') }}?v=7"
   >
 
   <script
-    src="{{ url_for('static', path='/chat.js') }}?v=4"
+    src="{{ url_for('static', path='/chat.js') }}?v=7"
     defer
   ></script>
 </head>
@@ -108,9 +108,21 @@
 
     <footer class="chat-footer">
       Enter to send · Shift+Enter for a new line.
-      After reviewing a request, type <strong>confirm</strong> to submit.
-      Type <strong>cancel</strong> to clear the conversation.
+      After reviewing a request, press <strong>Confirm</strong> (or type <strong>confirm</strong>) to submit.
+      <strong>Cancel</strong> (or <strong>cancel</strong>) clears the conversation.
     </footer>
+
+    <dialog
+      id="decision-dialog"
+      class="decision-dialog"
+      aria-labelledby="decision-title"
+    >
+      <h2 id="decision-title"></h2>
+      <p id="decision-text"></p>
+      <form method="dialog">
+        <button class="primary-button" type="submit">OK</button>
+      </form>
+    </dialog>
 
     <noscript>
       <p class="notice">

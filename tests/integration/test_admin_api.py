@@ -23,7 +23,7 @@ class StubGraph:
 
     async def resume(self, thread_id, reservation_id, decision, note, context):
         self.resumed.append((thread_id, reservation_id, decision, note))
-        return "recorded" if decision == "approved" else "rejected"
+        return "approved" if decision == "approved" else "rejected"
 
 
 def build_test_app(db_session, parking_graph) -> FastAPI:
@@ -116,5 +116,31 @@ async def test_decision_resumes_the_reservations_conversation(db_session, sample
         )
 
     assert response.status_code == 200
-    assert response.json() == {"status": "recorded"}
+    assert response.json() == {"status": "approved"}
     assert parking_graph.resumed == [(THREAD_ID, reservation_id, "approved", None)]
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_decision_without_a_conversation_is_recorded_directly(db_session, sample_parking):
+    """Reservations submitted before conversation_id existed have no paused
+    conversation to resume; the admin can still close them."""
+    reservation_id = uuid4()
+    await ReservationRepository(db_session).submit_pending(reservation_id, _booking(sample_parking.id))
+
+    parking_graph = StubGraph()
+    app = build_test_app(db_session, parking_graph)
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        response = await client.post(
+            f"/admin/reservations/{reservation_id}/decision",
+            headers={"X-Admin-Key": "test-admin-key"},
+            json={"decision": "rejected", "note": "stale request"},
+        )
+
+    assert response.status_code == 200
+    assert response.json() == {"status": "rejected"}
+    assert parking_graph.resumed == []
+
+    reservation = await ReservationRepository(db_session).get_by_id(reservation_id)
+    assert reservation.status == "rejected"

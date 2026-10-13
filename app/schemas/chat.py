@@ -7,7 +7,7 @@ from pydantic import (
     model_validator,
 )
 
-from app.enums import ChatStatus, SpaceType
+from app.enums import ChatStatus, ReservationStatus, SpaceType
 
 
 class ChatRequest(BaseModel):
@@ -26,6 +26,17 @@ class ChatResponse(BaseModel):
     status: ChatStatus = ChatStatus.COMPLETE
     answer: str
     sources: list[SourceResponse] = Field(default_factory=list)
+    # The answer is a reservation review: the chat page offers Confirm / Cancel.
+    awaiting_confirmation: bool = False
+
+
+class ChatUpdatesResponse(BaseModel):
+    """GET /chat/updates: polled by the chat page while a reservation awaits approval."""
+
+    status: ChatStatus
+    # The administrator's decision, returned once when it arrives; otherwise None.
+    notice: str | None = None
+    reservation_status: ReservationStatus | None = None
 
 
 class BookingInput(BaseModel):

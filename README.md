@@ -57,7 +57,7 @@ START -> user_agent -+-> admin -> record -> notification -> END   (after `confir
 4. The `record` node acts on the decision through `ParkingService.record_decision()`:
    approved, it calls the MCP server's `record_reservation` tool (writes
    `Name | Car Number | Reservation Period | Approval Time` to a file) and sets the
-   reservation's status to `recorded`; rejected, it sets it to `rejected`.
+   reservation's status to `approved`; rejected, it sets it to `rejected`.
 5. The `notification` node leaves the outcome for the customer: their next message in that
    session is answered with the approved/rejected notice.
 

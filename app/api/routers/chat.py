@@ -12,7 +12,7 @@ from app.dependencies import (
     global_user_limit,
 )
 from app.helpers import set_chat_cookie
-from app.schemas.chat import ChatRequest, ChatResponse
+from app.schemas.chat import ChatRequest, ChatResponse, ChatUpdatesResponse
 
 router = APIRouter(tags=["chat"])
 
@@ -56,4 +56,22 @@ async def chat(
 
     set_chat_cookie(response, session_id)
 
-    return ChatResponse(status=result["status"], answer=result["answer"], sources=context.sources)
+    return ChatResponse(
+        status=result["status"],
+        answer=result["answer"],
+        sources=context.sources,
+        awaiting_confirmation=result.get("awaiting_confirmation", False),
+    )
+
+
+# Not under cookie_rate_limit: the chat page polls this every few seconds while
+# a reservation awaits approval, and it never calls the model.
+@router.get("/chat/updates", response_model=ChatUpdatesResponse)
+async def chat_updates(
+    response: Response,
+    session_id: CookieDependency,
+    parking_graph: ParkingGraphDependency,
+) -> ChatUpdatesResponse:
+    response.headers["Cache-Control"] = "no-store"
+
+    return ChatUpdatesResponse(**await parking_graph.updates(session_id))

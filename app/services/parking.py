@@ -102,7 +102,7 @@ class ParkingService:
         self, reservation_id: UUID, *, approved: bool, note: str | None = None
     ) -> ReservationStatus | str:
         """Close a pending reservation: on approval, record it through the
-        Stage 3 MCP server and mark it RECORDED; otherwise mark it REJECTED.
+        Stage 3 MCP server and mark it APPROVED; otherwise mark it REJECTED.
         Returns the resulting status."""
         reservation = await self.reservation_repository.get_by_id(reservation_id)
 
@@ -125,10 +125,10 @@ class ParkingService:
             )
 
             await self.reservation_repository.update(
-                reservation_id, {"status": ReservationStatus.RECORDED, "approved_at": approved_at}
+                reservation_id, {"status": ReservationStatus.APPROVED, "approved_at": approved_at}
             )
             logger.info("Reservation %s approved and recorded via MCP", reservation_id)
-            status = ReservationStatus.RECORDED
+            status = ReservationStatus.APPROVED
         else:
             await self.reservation_repository.update(reservation_id, {"status": ReservationStatus.REJECTED})
             logger.info("Reservation %s rejected (note=%s)", reservation_id, note)

@@ -3,10 +3,9 @@ from enum import StrEnum
 
 class ReservationStatus(StrEnum):
     PENDING = "pending"  # submitted, waiting for the administrator
-    APPROVED = "approved"
+    APPROVED = "approved"  # approved by the administrator and written through the MCP server
     REJECTED = "rejected"
     CANCELLED = "cancelled"
-    RECORDED = "recorded"  # approved and written through the MCP server
 
 
 class ApprovalDecision(StrEnum):

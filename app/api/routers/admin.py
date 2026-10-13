@@ -11,6 +11,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.ai.tools import ChatContext
 from app.dependencies import ParkingGraphDependency, ParkingServiceDependency, require_admin
+from app.enums import ApprovalDecision
 from app.logger import get_logger
 from app.schemas.admin import DecisionRequest, DecisionResponse, PendingReservation
 
@@ -62,22 +63,31 @@ async def decide(
 ) -> DecisionResponse:
     reservation = await parking_service.get_pending(reservation_id)
 
-    if reservation is None or reservation.conversation_id is None:
+    if reservation is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No pending reservation with that id")
 
     logger.info("Admin decision received for reservation %s: %s", reservation_id, payload.decision)
 
-    try:
-        reservation_status = await parking_graph.resume(
-            reservation.conversation_id,
-            reservation_id,
-            payload.decision,
-            payload.note,
-            ChatContext(parking_service=parking_service),
-        )
-    except LookupError as exc:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, detail="That reservation's conversation is not awaiting approval"
-        ) from exc
+    if reservation.conversation_id is not None:
+        try:
+            reservation_status = await parking_graph.resume(
+                reservation.conversation_id,
+                reservation_id,
+                payload.decision,
+                payload.note,
+                ChatContext(parking_service=parking_service),
+            )
+            return DecisionResponse(status=reservation_status)
+        except LookupError:
+            pass
 
+    # No conversation waiting on it (e.g. submitted before reservations had a
+    # conversation_id): decide directly, so a pending reservation can always be
+    # closed. The customer gets no chat notice - there's no conversation to send it to.
+    logger.warning("Reservation %s has no conversation awaiting approval; deciding directly", reservation_id)
+    reservation_status = await parking_service.record_decision(
+        reservation_id,
+        approved=payload.decision == ApprovalDecision.APPROVED,
+        note=payload.note,
+    )
     return DecisionResponse(status=reservation_status)

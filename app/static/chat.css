@@ -189,6 +189,12 @@ h1 {
   background: #1d4ed8;
 }
 
+.review-actions {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
 .status {
   min-height: 22px;
   margin: 12px 0 8px;
@@ -249,6 +255,43 @@ h1 {
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+.decision-dialog {
+  width: min(420px, calc(100vw - 32px));
+  padding: 24px;
+  border: 1px solid #dbe4ef;
+  border-top: 6px solid #2563eb;
+  border-radius: 16px;
+  color: #172033;
+  box-shadow: 0 20px 60px #17203333;
+}
+
+.decision-dialog.approved {
+  border-top-color: #16a34a;
+}
+
+.decision-dialog.rejected {
+  border-top-color: #dc2626;
+}
+
+.decision-dialog::backdrop {
+  background: #17203366;
+}
+
+.decision-dialog h2 {
+  margin: 0 0 8px;
+  font-size: 1.2rem;
+}
+
+.decision-dialog p {
+  margin: 0 0 20px;
+  white-space: pre-line;
+}
+
+.decision-dialog form {
+  display: flex;
+  justify-content: flex-end;
 }
 
 noscript .notice {
