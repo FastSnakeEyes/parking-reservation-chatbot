@@ -32,6 +32,19 @@ logger = logging.getLogger(__name__)
 # Mirrors app/constants/admin.py.
 DEV_ONLY_SECRET = "local-dev-only-change-me"  # noqa: S105 (a known dev value production rejects)
 MIN_PRODUCTION_SECRET_LENGTH = 16
+MIN_PRODUCTION_SECRET_DISTINCT_CHARS = 8
+
+
+def is_weak_secret(value: str) -> bool:
+    """Mirrors app/config.py's is_weak_secret (this service deliberately
+    doesn't import app.*; tests/unit/test_mcp_server.py keeps the two in step)."""
+    secret = value.strip()
+    return (
+        secret == DEV_ONLY_SECRET
+        or len(secret) < MIN_PRODUCTION_SECRET_LENGTH
+        or len(set(secret)) < MIN_PRODUCTION_SECRET_DISTINCT_CHARS
+    )
+
 
 RESERVATIONS_FILE = Path(os.environ.get("RESERVATIONS_FILE", "./data/approved_reservations.txt"))
 
@@ -111,11 +124,10 @@ def build_app() -> Starlette:
 
     # The same rule as app/config.py (this service deliberately doesn't import
     # it): in production, never run with the repo's dev default or a short key.
-    if os.environ.get("APP_ENV") == "production" and (
-        api_key == DEV_ONLY_SECRET or len(api_key) < MIN_PRODUCTION_SECRET_LENGTH
-    ):
+    if os.environ.get("APP_ENV") == "production" and is_weak_secret(api_key):
         raise RuntimeError(
-            f"APP_ENV=production needs a real MCP_API_KEY (unique, at least {MIN_PRODUCTION_SECRET_LENGTH} characters)"
+            "APP_ENV=production needs a real MCP_API_KEY: a unique random value of at least "
+            f"{MIN_PRODUCTION_SECRET_LENGTH} characters, e.g. `openssl rand -hex 32`"
         )
 
     app = server.streamable_http_app()

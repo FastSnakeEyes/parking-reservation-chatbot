@@ -12,7 +12,7 @@ from starlette.concurrency import run_in_threadpool
 from app.ai.chat_cleanup import run_chat_cleanup
 from app.ai.graph import ParkingGraph
 from app.ai.guardrails import get_injection_classifier, get_pii_guard
-from app.config import settings
+from app.config import check_production_secrets, settings
 from app.constants import LLM_MAX_RETRIES, LLM_TEMPERATURE, LLM_TIMEOUT_SECONDS
 from app.dependencies import create_vector_repository
 from app.logger import get_logger
@@ -65,6 +65,7 @@ async def _cancel(task: asyncio.Task) -> None:
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     logger.info("Starting up (env=%s)", settings.app_env.value)
+    check_production_secrets(settings)
 
     if settings.redis_url is None:
         raise RuntimeError("REDIS_URL is required")

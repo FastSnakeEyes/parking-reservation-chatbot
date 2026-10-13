@@ -1,11 +1,16 @@
 import os
 from pathlib import Path
 
-from pydantic import Field, SecretStr, model_validator
+from pydantic import Field, SecretStr
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
 
-from app.constants import BASE_DIR, DEV_ONLY_SECRET, MIN_PRODUCTION_SECRET_LENGTH
+from app.constants import (
+    BASE_DIR,
+    DEV_ONLY_SECRET,
+    MIN_PRODUCTION_SECRET_DISTINCT_CHARS,
+    MIN_PRODUCTION_SECRET_LENGTH,
+)
 from app.enums import AppEnvironment, LogLevel, TokenCounterKind
 
 
@@ -116,14 +121,6 @@ class Settings(BaseSettings):
             database=self.postgres_db,
         ).render_as_string(hide_password=False)
 
-    @model_validator(mode="after")
-    def _require_real_secrets_in_production(self) -> "Settings":
-        """The shared-secret defaults are published in this repository, so in
-        production a missing, default or short key stops the app at startup -
-        instead of running with a key anyone can read."""
-        if self.app_env != AppEnvironment.PRODUCTION:
-            return self
-
         weak = [
             name
             for name, secret in (("ADMIN_API_KEY", self.admin_api_key), ("MCP_API_KEY", self.mcp_api_key))
@@ -136,6 +133,42 @@ class Settings(BaseSettings):
                 f"of at least {MIN_PRODUCTION_SECRET_LENGTH} characters."
             )
         return self
+
+
+def is_weak_secret(value: str) -> bool:
+    """A shared secret anyone could guess: the repo's published dev default,
+    or - ignoring surrounding whitespace - too short or too repetitive.
+    mcp_server/server.py mirrors this rule (a test keeps the two in step)."""
+    secret = value.strip()
+    return (
+        secret == DEV_ONLY_SECRET
+        or len(secret) < MIN_PRODUCTION_SECRET_LENGTH
+        or len(set(secret)) < MIN_PRODUCTION_SECRET_DISTINCT_CHARS
+    )
+
+
+def check_production_secrets(config: Settings) -> None:
+    """Called at API startup (app/lifespan.py), not when settings load, so
+    migrations and ingestion scripts - which never use these keys - still run.
+    In production, refuse weak keys, and one key reused for both the admin API
+    and the MCP server (a leak of one would expose both)."""
+    if config.app_env != AppEnvironment.PRODUCTION:
+        return
+
+    keys = {"ADMIN_API_KEY": config.admin_api_key, "MCP_API_KEY": config.mcp_api_key}
+    problems = [
+        f"{name} is missing, the dev default, or too weak"
+        for name, key in keys.items()
+        if is_weak_secret(key.get_secret_value())
+    ]
+    if config.admin_api_key.get_secret_value().strip() == config.mcp_api_key.get_secret_value().strip():
+        problems.append("ADMIN_API_KEY and MCP_API_KEY must be different")
+
+    if problems:
+        raise RuntimeError(
+            "APP_ENV=production needs real secrets: " + "; ".join(problems) + ". Use unique random values "
+            f"(at least {MIN_PRODUCTION_SECRET_LENGTH} characters), e.g. `openssl rand -hex 32`."
+        )
 
 
 settings = Settings()

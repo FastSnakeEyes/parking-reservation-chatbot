@@ -82,10 +82,44 @@ async def test_record_reservation_appends_the_spec_line_format(monkeypatch, tmp_
     ]
 
 
-@pytest.mark.parametrize("token", ["local-dev-only-change-me", "short-token"], ids=["dev-default", "short"])
+@pytest.mark.parametrize(
+    "token",
+    ["local-dev-only-change-me", "short-token", "aaaaaaaaaaaaaaaaaaaa"],
+    ids=["dev-default", "short", "repetitive"],
+)
 def test_refuses_a_weak_token_in_production(monkeypatch, token):
     monkeypatch.setenv("APP_ENV", "production")
     monkeypatch.setenv("MCP_API_KEY", token)
 
     with pytest.raises(RuntimeError, match="needs a real MCP_API_KEY"):
         server.build_app()
+
+
+@pytest.mark.parametrize(
+    "value",
+    [
+        "local-dev-only-change-me",
+        "short-key",
+        "aaaaaaaaaaaaaaaaaaaa",
+        "1234123412341234",
+        "   " + " " * 20,
+        "4f1c9e2a7b3d8065c1e4",
+        "  4f1c9e2a7b3d8065c1e4\n",
+        "abcdefgh12345678",
+        "abcdefg123456789",
+        # Around the minimum of 8 different characters, where a drifted copy would differ:
+        "abcdefabcdefabcdef",  # 6
+        "abcdefgabcdefgabcd",  # 7
+        "abcdefghabcdefghab",  # 8
+        "abcdefghiabcdefghi",  # 9
+        # Around the minimum length of 16:
+        "abcdefghijklmno",  # 15
+        "abcdefghijklmnop",  # 16
+    ],
+)
+def test_weak_secret_rule_matches_the_apps(value):
+    """The server mirrors app/config.py's rule (it doesn't import app.*);
+    this keeps the two copies from drifting apart."""
+    from app.config import is_weak_secret as app_rule
+
+    assert server.is_weak_secret(value) == app_rule(value)

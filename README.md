@@ -202,8 +202,10 @@ The same Docker Compose stack runs in production; what changes is configuration.
    HTTPS (behind a TLS-terminating reverse proxy such as nginx, Caddy or a cloud load
    balancer). Use strong, unique secrets for `ADMIN_API_KEY`, `MCP_API_KEY` and
    `POSTGRES_PASSWORD`; never commit the file. In production the API and the MCP server
-   refuse to start with a missing, default (`local-dev-only-change-me`) or short (< 16
-   characters) admin/MCP key.
+   refuse to start with a missing, default (`local-dev-only-change-me`), short (< 16
+   characters) or repetitive (< 8 different characters) admin/MCP key, or with the same key
+   for both - generate each with e.g. `openssl rand -hex 32`. Migrations and ingestion
+   scripts don't check them, since they never use these keys.
 2. **Network exposure.** Publish only the API port. Postgres, Redis, Milvus and the MCP
    server bind to `BIND_ADDRESS` (keep `127.0.0.1`) and are reached by the API over the
    Compose network. The admin endpoints are protected by `X-Admin-Key` (constant-time
