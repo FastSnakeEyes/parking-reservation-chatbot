@@ -38,22 +38,25 @@ async def delete_idle_chat_threads(
     skipped until the next sweep."""
     cutoff = datetime.now(UTC) - timedelta(seconds=idle_seconds)
 
+    # A short session per query: no transaction stays open while the sweep
+    # waits on locks or deletes threads.
     async with AsyncSession(engine) as session:
-        threads = ChatThreadRepository(session)
-        thread_ids = await threads.idle_thread_ids(cutoff)
+        thread_ids = await ChatThreadRepository(session).idle_thread_ids(cutoff)
 
-        deleted = 0
-        for thread_id in thread_ids:
-            lock = thread_lock(thread_id)
-            if not await lock.acquire(blocking=False):
-                continue
+    deleted = 0
+    for thread_id in thread_ids:
+        lock = thread_lock(thread_id)
+        if not await lock.acquire(blocking=False):
+            continue
 
-            try:
-                if await threads.is_idle(thread_id, cutoff):
-                    await checkpointer.adelete_thread(thread_id)
-                    deleted += 1
-            finally:
-                await lock.release()
+        try:
+            async with AsyncSession(engine) as session:
+                still_idle = await ChatThreadRepository(session).is_idle(thread_id, cutoff)
+            if still_idle:
+                await checkpointer.adelete_thread(thread_id)
+                deleted += 1
+        finally:
+            await lock.release()
 
     if deleted:
         logger.info("Deleted %d idle chat threads", deleted)
