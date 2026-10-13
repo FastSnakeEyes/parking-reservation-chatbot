@@ -27,6 +27,6 @@ eval: install
 	uv run --group eval python -m evals.rag_eval
 
 load-test: install
-	uv run --group eval locust -f load_tests/locustfile.py --host http://localhost:8000
+	uv run --group eval locust -f load_tests/locustfile.py ChatUser --host http://localhost:8000
 
 .PHONY: install_uv init_venv install check format test admin-ui eval load-test

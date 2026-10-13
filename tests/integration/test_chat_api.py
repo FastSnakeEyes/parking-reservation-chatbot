@@ -33,3 +33,22 @@ async def test_polling_for_updates_renews_the_session_cookie():
     set_cookie = response.headers["set-cookie"]
     assert f"{settings.cookie_name}={session_id}" in set_cookie
     assert f"Max-Age={settings.cookie_ttl}" in set_cookie
+
+
+@pytest.mark.asyncio
+async def test_a_blank_question_is_rejected_before_the_graph():
+    from app.dependencies import cookie_rate_limit, get_parking_service, global_user_limit
+
+    app = FastAPI()
+    app.include_router(chat_router)
+    app.state.parking_graph = None  # must never be reached
+    app.dependency_overrides[cookie_rate_limit] = lambda: None
+    app.dependency_overrides[global_user_limit] = lambda: None
+    app.dependency_overrides[get_parking_service] = lambda: None
+
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test", cookies={settings.cookie_name: str(uuid4())}
+    ) as client:
+        response = await client.post("/chat", json={"question": "   "})
+
+    assert response.status_code == 422

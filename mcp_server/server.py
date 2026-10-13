@@ -12,6 +12,7 @@ reservation: "Name | Car Number | Reservation Period | Approval Time".
 import asyncio
 import logging
 import os
+import secrets
 from pathlib import Path
 
 from mcp.server.fastmcp import FastMCP
@@ -89,7 +90,9 @@ class BearerAuthMiddleware(BaseHTTPMiddleware):
         if request.url.path in UNAUTHENTICATED_PATHS:
             return await call_next(request)
 
-        if request.headers.get("authorization") != f"Bearer {self._token}":
+        # Constant-time comparison: the token can't be guessed from response timing.
+        supplied = request.headers.get("authorization", "")
+        if not secrets.compare_digest(supplied.encode(), f"Bearer {self._token}".encode()):
             logger.warning("Rejected an unauthenticated request to %s", request.url.path)
             return JSONResponse({"error": "Unauthorized"}, status_code=401)
 

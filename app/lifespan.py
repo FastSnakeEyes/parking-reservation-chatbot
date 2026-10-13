@@ -84,17 +84,23 @@ async def lifespan(app: FastAPI):
             vector_repository.load_collection,
         )
 
+        llm_options = {
+            "model": settings.llm_model,
+            "api_key": api_key,
+            "temperature": LLM_TEMPERATURE,
+            "timeout": LLM_TIMEOUT_SECONDS,
+            "max_retries": LLM_MAX_RETRIES,
+        }
         llm = ChatOpenAI(
-            model=settings.llm_model,
-            api_key=api_key,
-            temperature=LLM_TEMPERATURE,
-            timeout=LLM_TIMEOUT_SECONDS,
-            max_retries=LLM_MAX_RETRIES,
+            **llm_options,
             # The user/admin agents' tools share one request-scoped AsyncSession;
             # LangGraph's ToolNode runs multiple tool calls from one turn
             # concurrently (asyncio.gather), which that session can't survive.
             model_kwargs={"parallel_tool_calls": False},
         )
+        # History summarization calls the model without tools, and OpenAI rejects
+        # parallel_tool_calls on a request without tools - so it gets its own client.
+        summary_llm = ChatOpenAI(**llm_options)
 
         # Loads spaCy/Presidio once at startup instead of on the first request.
         await run_in_threadpool(get_pii_guard)
@@ -104,7 +110,7 @@ async def lifespan(app: FastAPI):
         )
         await checkpointer.setup()  # idempotent; creates checkpoint tables on first run
         # Built once; per-request dependencies go in through ChatContext.
-        parking_graph = ParkingGraph(llm, checkpointer, redis)
+        parking_graph = ParkingGraph(llm, checkpointer, redis, summary_llm=summary_llm)
 
         # Pushed after the engine/checkpointer, so the stack cancels it before closing them.
         cleanup_task = asyncio.create_task(run_chat_cleanup(engine, checkpointer, parking_graph.lock))

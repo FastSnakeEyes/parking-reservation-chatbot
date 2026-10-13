@@ -51,7 +51,8 @@ def create_parking_tools() -> list[BaseTool]:
     ) -> dict:
         """Read date-specific prices, hours, capacities and restrictions.
 
-        Bookable capacity is not the number of free spaces.
+        Bookable capacity is not the number of free spaces - use
+        check_availability for those.
         """
 
         requested_date = on_date or datetime.now(local_timezone).date()
@@ -65,6 +66,31 @@ def create_parking_tools() -> list[BaseTool]:
             return {"error": "Parking not found"}
 
         return jsonable_encoder(info)
+
+    @tool
+    async def check_availability(
+        parking_id: int,
+        space_type: SpaceType,
+        starts_at: datetime,
+        ends_at: datetime,
+        runtime: ToolRuntime[ChatContext],
+    ) -> dict:
+        """Count free spaces of one space type for a period.
+
+        Datetimes must include a timezone offset.
+        """
+        if starts_at.tzinfo is None or ends_at.tzinfo is None:
+            return {"error": "starts_at and ends_at must include a timezone offset"}
+        if ends_at <= starts_at:
+            return {"error": "ends_at must be after starts_at"}
+
+        availability = await runtime.context.parking_service.reservation_repository.availability(
+            parking_id, space_type, starts_at, ends_at
+        )
+        if availability is None:
+            return {"error": "Parking or space type not found"}
+
+        return {"parking_id": parking_id, "space_type": space_type, **availability}
 
     @tool
     async def search_public_rules(query: str, runtime: ToolRuntime[ChatContext]) -> dict:
@@ -139,7 +165,7 @@ def create_parking_tools() -> list[BaseTool]:
         )
 
         try:
-            await runtime.context.parking_service.reservation_repository.validate_request(booking)
+            availability = await runtime.context.parking_service.reservation_repository.validate_request(booking)
         except ValueError as exc:
             # e.g. a start in the past, an unknown or non-bookable space type
             return {"error": f"Cannot prepare this reservation: {exc}. Ask the customer to correct it."}
@@ -187,7 +213,8 @@ def create_parking_tools() -> list[BaseTool]:
             f"End: "
             f"{booking.ends_at.astimezone(local_timezone).isoformat()}\n"
             f"Starting-date tariff: {tariff}\n"
-            f"Starting-date hours: {schedule}\n\n"
+            f"Starting-date hours: {schedule}\n"
+            f"Free {space_type} spaces for this period: {availability['available']}\n\n"
             "This is not a total price quote or a guaranteed space. "
             "The request requires administrator approval.\n"
             "Press Confirm (or type confirm) to submit, Cancel to discard, "
@@ -204,6 +231,7 @@ def create_parking_tools() -> list[BaseTool]:
     return [
         list_parkings,
         get_parking_info,
+        check_availability,
         search_public_rules,
         prepare_reservation,
     ]

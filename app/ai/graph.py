@@ -126,8 +126,8 @@ def _after_user_agent(state: ParkingState) -> Literal["admin", "__end__"]:
     return "admin" if state.get("submitted") else END
 
 
-def _build_graph(llm: BaseChatModel, checkpointer: BaseCheckpointSaver):
-    user_agent = build_user_agent(llm)
+def _build_graph(llm: BaseChatModel, checkpointer: BaseCheckpointSaver, summary_llm: BaseChatModel | None = None):
+    user_agent = build_user_agent(llm, summary_llm)
     admin_agent = build_admin_agent(llm)
 
     # -- Node: the customer's turn ------------------------------------------ #
@@ -216,8 +216,16 @@ def _build_graph(llm: BaseChatModel, checkpointer: BaseCheckpointSaver):
 class ParkingGraph:
     """Built once at startup (app/lifespan.py); called by the API routers."""
 
-    def __init__(self, llm: BaseChatModel, checkpointer: BaseCheckpointSaver, redis: Redis):
-        self.graph = _build_graph(llm, checkpointer)
+    def __init__(
+        self,
+        llm: BaseChatModel,
+        checkpointer: BaseCheckpointSaver,
+        redis: Redis,
+        summary_llm: BaseChatModel | None = None,
+    ):
+        """summary_llm summarizes long histories (defaults to llm); it must
+        accept requests without tools - see app/lifespan.py."""
+        self.graph = _build_graph(llm, checkpointer, summary_llm)
         self.redis = redis
 
     @staticmethod

@@ -62,7 +62,7 @@ class FakeRepository:
 
 class FakeReservations:
     async def validate_request(self, booking):
-        return None
+        return {"bookable_spaces": 5, "reserved": 0, "available": 5}
 
 
 class FakeService:
@@ -376,3 +376,22 @@ async def test_long_history_is_folded_into_a_summary(lock_redis, parking_service
     assert "first question" not in contents
     assert any("Customer asked about parking." in c for c in contents)
     assert contents[-2:] == ["second question", "Second answer."]
+
+
+@pytest.mark.asyncio
+async def test_long_history_is_summarized_by_the_summary_model(lock_redis, parking_service, monkeypatch):
+    """The summary comes from summary_llm, not the agents' model: the real agent
+    model carries parallel_tool_calls, which OpenAI rejects on a request without
+    tools - and summarizing sends none."""
+    monkeypatch.setattr(settings, "history_max_tokens", 60)
+    monkeypatch.setattr(settings, "history_keep_tokens", 20)
+    agent_model = ScriptedModel(responses=[AIMessage(content="A long first answer " * 10), AIMessage("Second.")])
+    summary_model = ScriptedModel(responses=[AIMessage(content="Summary from the summary model.")])
+    parking_graph = ParkingGraph(agent_model, InMemorySaver(), lock_redis, summary_llm=summary_model)
+
+    await _chat(parking_graph, parking_service, "first question")
+    await _chat(parking_graph, parking_service, "second question")
+
+    contents = await _messages(parking_graph)
+    assert any("Summary from the summary model." in content for content in contents)
+    assert summary_model.tool_choices == []  # the summary call binds no tools

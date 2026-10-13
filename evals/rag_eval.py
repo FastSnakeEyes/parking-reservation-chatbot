@@ -21,6 +21,7 @@ from app.config import settings
 from app.dependencies import create_vector_repository
 
 GOLDEN_SET_PATH = Path(__file__).resolve().parent / "golden_qa.json"
+CHAT_REQUEST_SPACING_SECONDS = 5.5
 
 
 def load_golden_set() -> list[dict]:
@@ -38,10 +39,12 @@ def evaluate_retrieval(repository, golden_set: list[dict], k: int) -> dict:
         elapsed_ms = (time.perf_counter() - started) * 1000
 
         retrieved_sources = [document.metadata.get("source", "unknown") for document in documents]
-        relevant_retrieved = {source for source in retrieved_sources if source in relevant}
 
-        precision = len(relevant_retrieved) / len(retrieved_sources) if retrieved_sources else 0.0
-        recall = len(relevant_retrieved) / len(relevant) if relevant else 0.0
+        # Precision@K: share of the K retrieved chunks that come from a relevant doc.
+        relevant_chunks = sum(source in relevant for source in retrieved_sources)
+        precision = relevant_chunks / len(retrieved_sources) if retrieved_sources else 0.0
+        # Recall@K: share of the relevant docs with at least one chunk in the top K.
+        recall = len(relevant & set(retrieved_sources)) / len(relevant) if relevant else 0.0
 
         per_query.append(
             {
@@ -71,12 +74,16 @@ def evaluate_retrieval(repository, golden_set: list[dict], k: int) -> dict:
 def measure_chat_latency(api_url: str, golden_set: list[dict], rounds: int = 1) -> dict | None:
     """End-to-end /chat latency, if a running API URL was given."""
     try:
-        with httpx.Client(base_url=api_url, timeout=30) as client:
+        with httpx.Client(base_url=api_url, timeout=60) as client:
             client.get("/health").raise_for_status()
+            client.get("/").raise_for_status()  # the session cookie /chat requires
 
             samples = []
 
-            for case in golden_set[:5] * rounds:
+            for index, case in enumerate(golden_set[:5] * rounds):
+                if index:
+                    # Stay under the per-session limit (2 requests / 10 s).
+                    time.sleep(CHAT_REQUEST_SPACING_SECONDS)
                 started = time.perf_counter()
                 response = client.post("/chat", json={"question": case["question"]})
                 response.raise_for_status()
@@ -121,6 +128,17 @@ def render_report(retrieval: dict, chat_latency: dict | None) -> str:
         ]
 
     lines += [
+        "## Method",
+        "",
+        "- Relevance is labelled per source document (`golden_qa.json`); the static docs are",
+        "  split into chunks, so one document can fill several of the K results.",
+        f"- **Precision@{retrieval['k']}**: share of the K retrieved chunks that come from a relevant document.",
+        f"- **Recall@{retrieval['k']}**: share of the relevant documents with at least one chunk in the top K.",
+        "- Retrieval latency includes embedding the question through the OpenAI embeddings API,",
+        "  which dominates it; the vector search itself is a few milliseconds.",
+        "- End-to-end /chat latency is a real chat turn (agent, tools, model calls), spaced to stay",
+        "  under the per-session rate limit.",
+        "",
         "## Per-question detail",
         "",
         "| Question | Precision | Recall | Latency (ms) | Retrieved sources |",

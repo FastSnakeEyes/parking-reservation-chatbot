@@ -47,7 +47,8 @@ START -> user_agent -+-> admin -> record -> notification -> END   (after `confir
 1. A user chats via the web UI (`app/templates/chat.html`) → `POST /chat` → `ParkingGraph.chat()`.
    The `user_agent` node first handles the injection guard and the `cancel`/`confirm` commands
    without the model; anything else goes to the user agent, which answers from Milvus/Postgres
-   or collects booking details and shows a review. The review comes with **Confirm** and
+   (including free spaces for a period via `check_availability`) or collects booking details
+   and shows a review. The review comes with **Confirm** and
    **Cancel** buttons (`/chat` returns `awaiting_confirmation: true`); typing `confirm` /
    `cancel` works too.
 2. On `confirm`, `user_agent` calls `ParkingService.book()`: the reservation is saved with
@@ -102,6 +103,11 @@ The admin endpoints check `X-Admin-Key` in constant time; after 10 failed attemp
 5 minutes, a client IP is refused (429) until the window expires.
 
 Reservation statuses: `pending` → `approved` (also written through MCP) or `rejected`.
+
+Capacity: a space type's free spaces for a period are its bookable capacity (or the smallest
+overlapping `capacity_overrides` entry) minus the peak number of `pending` + `approved`
+reservations at the same moment. A submission is refused when none is free; the check and
+the insert run under a row lock, so two customers can't both take the last space.
 
 ## Prerequisites
 
@@ -171,17 +177,52 @@ Reservation statuses: `pending` → `approved` (also written through MCP) or `re
   ```
 
 - **RAG evaluation** (Precision@K/Recall@K against a hand-labelled golden set, plus
-  retrieval latency; requires the static docs to already be ingested):
+  retrieval and end-to-end `/chat` latency; requires the static docs to already be ingested).
+  Latest results: [`evals/report.md`](evals/report.md) - Precision@4 0.58, Recall@4 0.93.
 
   ```bash
-  make eval
+  make eval                                         # retrieval only
+  uv run --group eval python -m evals.rag_eval --api-url http://localhost:8000   # + /chat latency
   ```
 
-- **Load test** (Locust, against a running stack):
+- **Load tests** (Locust, against a running stack) for each component: the chatbot
+  (`ChatUser`), administrator confirmation (`AdminUser`) and MCP recording (`MCPUser`).
+  Procedure and latest results: [`load_tests/report.md`](load_tests/report.md).
 
   ```bash
-  make load-test
+  make load-test        # the chatbot; see the report for AdminUser / MCPUser
   ```
+
+## Deployment
+
+The same Docker Compose stack runs in production; what changes is configuration.
+
+1. **Environment file.** Create `.env.production` from `.env.example` and set
+   `APP_ENV=production` - this marks the session cookie `Secure`, so serve the app over
+   HTTPS (behind a TLS-terminating reverse proxy such as nginx, Caddy or a cloud load
+   balancer). Use strong, unique secrets for `ADMIN_API_KEY`, `MCP_API_KEY` and
+   `POSTGRES_PASSWORD`; never commit the file.
+2. **Network exposure.** Publish only the API port. Postgres, Redis, Milvus and the MCP
+   server bind to `BIND_ADDRESS` (keep `127.0.0.1`) and are reached by the API over the
+   Compose network. The admin endpoints are protected by `X-Admin-Key` (constant-time
+   check, lockout after repeated failures); restrict `/admin` at the proxy too if possible.
+3. **Start and migrate** on every deploy - migrations are idempotent:
+
+   ```bash
+   docker compose --env-file .env.production up -d --build
+   docker compose --env-file .env.production run --rm --no-deps api \
+       uv run --frozen --no-sync alembic upgrade head
+   ```
+
+4. **Data.** Ingest the static docs (Milvus) and dynamic data (Postgres) once, and again
+   whenever they change (`scripts.ingest_static` / `scripts.ingest_dynamic`, see Setup).
+   Back up the `postgres_data` volume (reservations and conversation checkpoints) and the
+   MCP server's `mcp_reservations` volume (the approved-reservations file).
+5. **Verify.** `GET /health` should report the API, Postgres and Redis as `ok`; the startup
+   log shows whether LangSmith tracing is enabled.
+
+CI (`.github/workflows/ci.yml`) runs Ruff and the full test suite on every push and pull
+request.
 
 ## Project structure
 
@@ -216,8 +257,8 @@ mcp_server/      Stage 3 MCP server (records approved reservations to a file)
 ui/              Stage 2 Streamlit admin console
 migrations/      Alembic migrations
 scripts/         Milvus/Postgres data ingestion
-evals/           RAG evaluation (golden set + script)
-load_tests/      Locust load test
+evals/           RAG evaluation (golden set, script, latest report)
+load_tests/      Locust load tests per component, seed script, latest report
 tests/           unit / integration / e2e tests
 docs/            the course specification this repo implements
 ```
