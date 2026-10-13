@@ -8,6 +8,12 @@ services:
       - ${ENV_FILE:-.env.development}
     volumes:
       - ./migrations:/app/migrations
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request as u; u.urlopen('http://localhost:8000/health')"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 60s  # spaCy/Presidio load at startup
     depends_on:
       postgres:
         condition: service_healthy

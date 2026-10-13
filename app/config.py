@@ -1,11 +1,11 @@
 import os
 from pathlib import Path
 
-from pydantic import Field, SecretStr
+from pydantic import Field, SecretStr, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from sqlalchemy import URL
 
-from app.constants import BASE_DIR
+from app.constants import BASE_DIR, DEV_ONLY_SECRET, MIN_PRODUCTION_SECRET_LENGTH
 from app.enums import AppEnvironment, LogLevel, TokenCounterKind
 
 
@@ -75,10 +75,10 @@ class Settings(BaseSettings):
     injection_model: str = "protectai/deberta-v3-base-prompt-injection-v2"
     spacy_model: str = "en_core_web_sm"
 
-    admin_api_key: SecretStr = SecretStr("local-dev-only-change-me")
+    admin_api_key: SecretStr = SecretStr(DEV_ONLY_SECRET)
 
     mcp_server_url: str = "http://localhost:9000/mcp"
-    mcp_api_key: SecretStr = SecretStr("local-dev-only-change-me")
+    mcp_api_key: SecretStr = SecretStr(DEV_ONLY_SECRET)
 
     log_level: LogLevel = LogLevel.INFO
 
@@ -115,6 +115,27 @@ class Settings(BaseSettings):
             port=self.postgres_port,
             database=self.postgres_db,
         ).render_as_string(hide_password=False)
+
+    @model_validator(mode="after")
+    def _require_real_secrets_in_production(self) -> "Settings":
+        """The shared-secret defaults are published in this repository, so in
+        production a missing, default or short key stops the app at startup -
+        instead of running with a key anyone can read."""
+        if self.app_env != AppEnvironment.PRODUCTION:
+            return self
+
+        weak = [
+            name
+            for name, secret in (("ADMIN_API_KEY", self.admin_api_key), ("MCP_API_KEY", self.mcp_api_key))
+            if secret.get_secret_value() == DEV_ONLY_SECRET
+            or len(secret.get_secret_value()) < MIN_PRODUCTION_SECRET_LENGTH
+        ]
+        if weak:
+            raise ValueError(
+                f"APP_ENV=production needs real secrets: set {', '.join(weak)} to a unique random value "
+                f"of at least {MIN_PRODUCTION_SECRET_LENGTH} characters."
+            )
+        return self
 
 
 settings = Settings()

@@ -19,6 +19,14 @@ COPY data ./data
 COPY alembic.ini ./
 COPY migrations ./migrations
 
+# Run as an unprivileged user, not root. /data is the MCP server's reservations
+# volume: created here owned by `app`, so a new named volume starts writable
+# by it (Docker copies the image directory's ownership on first use).
+RUN useradd --create-home --uid 10001 app \
+    && mkdir -p /data \
+    && chown app:app /data
+USER app
+
 EXPOSE 8000
 
 CMD ["uv", "run", "--frozen", "--no-sync", "uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

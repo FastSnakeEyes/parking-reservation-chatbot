@@ -29,6 +29,10 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# Mirrors app/constants/admin.py.
+DEV_ONLY_SECRET = "local-dev-only-change-me"  # noqa: S105 (a known dev value production rejects)
+MIN_PRODUCTION_SECRET_LENGTH = 16
+
 RESERVATIONS_FILE = Path(os.environ.get("RESERVATIONS_FILE", "./data/approved_reservations.txt"))
 
 server = FastMCP(name="parking-reservation-mcp", host="0.0.0.0")  # noqa: S104 (containerized service)
@@ -104,6 +108,15 @@ def build_app() -> Starlette:
 
     if not api_key:
         raise RuntimeError("MCP_API_KEY is required")
+
+    # The same rule as app/config.py (this service deliberately doesn't import
+    # it): in production, never run with the repo's dev default or a short key.
+    if os.environ.get("APP_ENV") == "production" and (
+        api_key == DEV_ONLY_SECRET or len(api_key) < MIN_PRODUCTION_SECRET_LENGTH
+    ):
+        raise RuntimeError(
+            f"APP_ENV=production needs a real MCP_API_KEY (unique, at least {MIN_PRODUCTION_SECRET_LENGTH} characters)"
+        )
 
     app = server.streamable_http_app()
     app.add_middleware(BearerAuthMiddleware, token=api_key)

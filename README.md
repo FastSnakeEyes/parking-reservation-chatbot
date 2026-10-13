@@ -201,7 +201,9 @@ The same Docker Compose stack runs in production; what changes is configuration.
    `APP_ENV=production` - this marks the session cookie `Secure`, so serve the app over
    HTTPS (behind a TLS-terminating reverse proxy such as nginx, Caddy or a cloud load
    balancer). Use strong, unique secrets for `ADMIN_API_KEY`, `MCP_API_KEY` and
-   `POSTGRES_PASSWORD`; never commit the file.
+   `POSTGRES_PASSWORD`; never commit the file. In production the API and the MCP server
+   refuse to start with a missing, default (`local-dev-only-change-me`) or short (< 16
+   characters) admin/MCP key.
 2. **Network exposure.** Publish only the API port. Postgres, Redis, Milvus and the MCP
    server bind to `BIND_ADDRESS` (keep `127.0.0.1`) and are reached by the API over the
    Compose network. The admin endpoints are protected by `X-Admin-Key` (constant-time
@@ -221,8 +223,11 @@ The same Docker Compose stack runs in production; what changes is configuration.
 5. **Verify.** `GET /health` should report the API, Postgres and Redis as `ok`; the startup
    log shows whether LangSmith tracing is enabled.
 
-Every service has `restart: unless-stopped` and the stateful ones a health check, so a crashed
-container (or a host reboot) brings the stack back on its own.
+Every service has `restart: unless-stopped` and a health check (the API's polls `/health`), so
+a crashed container, a hung API or a host reboot brings the stack back on its own. The API and
+MCP server containers run as an unprivileged `app` user, not root. Upgrading an existing
+deployment from a root-run image: give the MCP volume to that user once -
+`docker run --rm -v <project>_mcp_reservations:/data alpine chown -R 10001:10001 /data`.
 
 CI (`.github/workflows/ci.yml`) runs Ruff and the full test suite on every push and pull
 request.

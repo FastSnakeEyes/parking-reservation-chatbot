@@ -80,3 +80,12 @@ async def test_record_reservation_appends_the_spec_line_format(monkeypatch, tmp_
         "Jane Doe | ABC123 | 2026-10-20T10:00:00+03:00 - 2026-10-20T12:00:00+03:00 | 2026-10-13T18:00:00+03:00",
         "Jane Doe | XYZ987 | 2026-10-20T10:00:00+03:00 - 2026-10-20T12:00:00+03:00 | 2026-10-13T18:00:00+03:00",
     ]
+
+
+@pytest.mark.parametrize("token", ["local-dev-only-change-me", "short-token"], ids=["dev-default", "short"])
+def test_refuses_a_weak_token_in_production(monkeypatch, token):
+    monkeypatch.setenv("APP_ENV", "production")
+    monkeypatch.setenv("MCP_API_KEY", token)
+
+    with pytest.raises(RuntimeError, match="needs a real MCP_API_KEY"):
+        server.build_app()
