@@ -221,6 +221,9 @@ The same Docker Compose stack runs in production; what changes is configuration.
 5. **Verify.** `GET /health` should report the API, Postgres and Redis as `ok`; the startup
    log shows whether LangSmith tracing is enabled.
 
+Every service has `restart: unless-stopped` and the stateful ones a health check, so a crashed
+container (or a host reboot) brings the stack back on its own.
+
 CI (`.github/workflows/ci.yml`) runs Ruff and the full test suite on every push and pull
 request.
 

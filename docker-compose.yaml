@@ -1,5 +1,6 @@
 services:
   api:
+    restart: unless-stopped  # come back after a crash or a host reboot
     build: .
     ports:
       - "${API_PORT}:8000"
@@ -18,6 +19,7 @@ services:
         condition: service_healthy
 
   postgres:
+    restart: unless-stopped  # come back after a crash or a host reboot
     image: ${POSTGRES_IMAGE}
     env_file:
       - ${ENV_FILE:-.env.development}
@@ -32,6 +34,7 @@ services:
       retries: 10
 
   redis:
+    restart: unless-stopped  # come back after a crash or a host reboot
     image: ${REDIS_IMAGE}
     ports:
       - "${BIND_ADDRESS}:${REDIS_PUBLISHED_PORT}:6379"
@@ -46,6 +49,7 @@ services:
 
   # Stage 3: MCP server recording administrator-approved reservations to a file.
   mcp-server:
+    restart: unless-stopped  # come back after a crash or a host reboot
     build: .
     command: ["uv", "run", "--frozen", "--no-sync", "python", "-m", "mcp_server.server"]
     env_file:
@@ -64,6 +68,7 @@ services:
 
   # Milvus standalone with embedded etcd and local storage (no MinIO / etcd containers)
   milvus:
+    restart: unless-stopped  # come back after a crash or a host reboot
     image: ${MILVUS_IMAGE:-milvusdb/milvus:v2.5.4}
     command: ["milvus", "run", "standalone"]
     security_opt:
