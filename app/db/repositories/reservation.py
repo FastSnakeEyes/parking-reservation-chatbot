@@ -32,6 +32,17 @@ class ReservationRepository(PostgresRepository[Reservation]):
         super().__init__(session=session, model=Reservation)
         self.timezone = ZoneInfo(settings.timezone)
 
+    async def get_for_update(self, reservation_id: UUID) -> Reservation | None:
+        """The reservation with its row locked until the transaction ends
+        (SELECT ... FOR UPDATE), freshly read so a concurrent decision's
+        status change is seen."""
+        return await self.session.scalar(
+            sa.select(Reservation)
+            .where(Reservation.id == reservation_id)
+            .with_for_update()
+            .execution_options(populate_existing=True)
+        )
+
     async def list_pending(self) -> list[Reservation]:
         rows = await self.session.scalars(
             sa.select(Reservation)

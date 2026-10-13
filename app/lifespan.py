@@ -11,13 +11,32 @@ from starlette.concurrency import run_in_threadpool
 
 from app.ai.chat_cleanup import run_chat_cleanup
 from app.ai.graph import ParkingGraph
-from app.ai.guardrails import get_pii_guard
+from app.ai.guardrails import get_injection_classifier, get_pii_guard
 from app.config import settings
 from app.constants import LLM_MAX_RETRIES, LLM_TEMPERATURE, LLM_TIMEOUT_SECONDS
 from app.dependencies import create_vector_repository
 from app.logger import get_logger
 
 logger = get_logger(__name__)
+
+
+def _load_injection_classifier() -> None:
+    """With USE_INJECTION_MODEL on, load the classifier at startup: a missing
+    backend (PyTorch isn't a default dependency) then stops the app with a
+    clear error, instead of failing every chat message at runtime."""
+    if not settings.use_injection_model:
+        return
+
+    try:
+        get_injection_classifier()
+    except Exception as exc:
+        raise RuntimeError(
+            "USE_INJECTION_MODEL=true, but the prompt-injection classifier "
+            f"({settings.injection_model}) could not be loaded. It needs PyTorch "
+            "(e.g. `uv add torch`); or set USE_INJECTION_MODEL=false."
+        ) from exc
+
+    logger.info("Prompt-injection classifier loaded (%s)", settings.injection_model)
 
 
 def _configure_langsmith() -> None:
@@ -104,6 +123,7 @@ async def lifespan(app: FastAPI):
 
         # Loads spaCy/Presidio once at startup instead of on the first request.
         await run_in_threadpool(get_pii_guard)
+        await run_in_threadpool(_load_injection_classifier)
 
         checkpointer = await stack.enter_async_context(
             AsyncPostgresSaver.from_conn_string(settings.database_url_psycopg)

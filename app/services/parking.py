@@ -106,13 +106,34 @@ class ParkingService:
     ) -> ReservationStatus | str:
         """Close a pending reservation: on approval, record it through the
         Stage 3 MCP server and mark it APPROVED; otherwise mark it REJECTED.
-        Returns the resulting status."""
-        reservation = await self.reservation_repository.get_by_id(reservation_id)
+        Returns the resulting status.
 
-        if reservation is None or reservation.status != ReservationStatus.PENDING:
-            status = reservation.status if reservation else "missing"
-            logger.warning("record_decision: reservation %s not pending (status=%s), skipping", reservation_id, status)
-            return status
+        The reservation's row is locked for the whole decision, so two
+        decisions arriving at once (e.g. a double-click in the admin console)
+        are made one after the other: the second sees it is no longer pending
+        and does nothing - the MCP file never gets the same approval twice."""
+        session = self.reservation_repository.session
+        try:
+            reservation = await self.reservation_repository.get_for_update(reservation_id)
+
+            if reservation is None or reservation.status != ReservationStatus.PENDING:
+                status = reservation.status if reservation else "missing"
+                logger.warning(
+                    "record_decision: reservation %s not pending (status=%s), skipping", reservation_id, status
+                )
+                await session.commit()  # nothing changed; ends the transaction, releasing the lock
+                return status
+
+            status = await self._decide(reservation, approved=approved, note=note)
+            await session.commit()
+        except BaseException:
+            await session.rollback()  # release the row lock right away
+            raise
+
+        return status
+
+    async def _decide(self, reservation: Reservation, *, approved: bool, note: str | None) -> ReservationStatus:
+        reservation_id = reservation.id
 
         if approved:
             approved_at = datetime.now(self.timezone)
@@ -136,7 +157,5 @@ class ParkingService:
             await self.reservation_repository.update(reservation_id, {"status": ReservationStatus.REJECTED})
             logger.info("Reservation %s rejected (note=%s)", reservation_id, note)
             status = ReservationStatus.REJECTED
-
-        await self.reservation_repository.session.commit()
 
         return status
