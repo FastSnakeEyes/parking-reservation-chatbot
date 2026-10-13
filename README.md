@@ -26,7 +26,10 @@ deployable that doesn't import `app.config`/`app.logger`.
 
 [LangSmith](https://smith.langchain.com) tracing for the LangChain/LangGraph calls is off by
 default; set `LANGSMITH_TRACING=true` plus `LANGSMITH_API_KEY` (and optionally
-`LANGSMITH_PROJECT`) to enable it - wired up in `app/lifespan.py`.
+`LANGSMITH_PROJECT`) to enable it - wired up in `app/lifespan.py`. For an EU-region
+LangSmith account also set `LANGSMITH_ENDPOINT=https://eu.api.smith.langchain.com` (otherwise
+every upload fails with 403); traces then appear at eu.smith.langchain.com. The startup log
+says whether tracing is enabled.
 
 ### Request flow
 
