@@ -13,6 +13,7 @@ from app.db.repositories.reservation import ReservationRepository
 from app.schemas.chat import BookingInput
 from langgraph.checkpoint.base import empty_checkpoint
 from sqlalchemy.ext.asyncio import AsyncSession
+from tests.conftest import FakeLock
 
 
 async def _write_checkpoint(checkpointer, thread_id: str, age: timedelta) -> None:
@@ -62,7 +63,7 @@ async def test_deletes_only_idle_chat_threads(engine, checkpointer, real_parking
         await ReservationRepository(session).submit_pending(reservation_id, booking, awaiting_admin)
 
     try:
-        deleted = await delete_idle_chat_threads(engine, checkpointer, idle_seconds=3600)
+        deleted = await delete_idle_chat_threads(engine, checkpointer, lambda _: FakeLock(), idle_seconds=3600)
     finally:
         async with AsyncSession(engine) as session:
             await session.execute(sa.delete(Reservation).where(Reservation.id == reservation_id))
@@ -73,3 +74,23 @@ async def test_deletes_only_idle_chat_threads(engine, checkpointer, real_parking
     assert await _exists(checkpointer, active_chat)
     assert await _exists(checkpointer, awaiting_admin)
     assert await _exists(checkpointer, other_thread)
+
+
+class HeldLock(FakeLock):
+    """A thread whose chat turn is running right now."""
+
+    async def acquire(self, *args, **kwargs):
+        return False
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_skips_a_thread_whose_turn_is_running(engine, checkpointer):
+    busy_chat = f"chat:{uuid4()}"
+    await _write_checkpoint(checkpointer, busy_chat, age=timedelta(hours=2))
+
+    await delete_idle_chat_threads(
+        engine, checkpointer, lambda thread_id: HeldLock() if thread_id == busy_chat else FakeLock(), idle_seconds=3600
+    )
+
+    assert await _exists(checkpointer, busy_chat)  # left for the next sweep

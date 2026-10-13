@@ -79,7 +79,9 @@ Each chat session's history lives in its checkpointer thread. The user agent's
 `SummarizationMiddleware` folds older turns into a summary once the history outgrows
 `HISTORY_MAX_TOKENS`, keeping the newest `HISTORY_KEEP_TOKENS` verbatim. A background job
 (`app/ai/chat_cleanup.py`) deletes chat threads idle longer than `COOKIE_TTL`, every
-`CHAT_CLEANUP_INTERVAL` seconds - never one still waiting for an admin decision.
+`CHAT_CLEANUP_INTERVAL` seconds - never one still waiting for an admin decision, and never
+one whose chat turn is running (it takes the conversation's lock and re-checks first). While
+the chat page waits for a decision, its polling keeps the session cookie alive.
 
 ### HTTP API
 

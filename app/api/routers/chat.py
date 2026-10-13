@@ -73,5 +73,8 @@ async def chat_updates(
     parking_graph: ParkingGraphDependency,
 ) -> ChatUpdatesResponse:
     response.headers["Cache-Control"] = "no-store"
+    # Polling keeps the session alive: a customer waiting on the page longer than
+    # cookie_ttl would otherwise lose it and never see the decision.
+    set_chat_cookie(response, session_id)
 
     return ChatUpdatesResponse(**await parking_graph.updates(session_id))

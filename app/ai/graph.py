@@ -228,8 +228,9 @@ class ParkingGraph:
     def _config(thread_id: str) -> dict:
         return {"configurable": {"thread_id": thread_id}}
 
-    def _lock(self, thread_id: str, blocking_timeout: float):
-        # Shared by chat turns and admin resumes: both write the same thread.
+    def lock(self, thread_id: str, blocking_timeout: float = 0):
+        """The thread's Redis lock - held by chat turns, admin resumes and the
+        idle-thread cleanup (app/ai/chat_cleanup.py), which all write the thread."""
         return self.redis.lock(
             f"parking:graph:{thread_id}:lock", timeout=THREAD_LOCK_TIMEOUT_SECONDS, blocking_timeout=blocking_timeout
         )
@@ -266,7 +267,7 @@ class ParkingGraph:
         """One customer turn. Returns {"status", "answer"}; status is
         "waiting_for_admin" while the conversation is paused for approval."""
         thread_id = self.thread_id(session_id)
-        lock = self._lock(thread_id, blocking_timeout=CHAT_LOCK_WAIT_SECONDS)
+        lock = self.lock(thread_id, blocking_timeout=CHAT_LOCK_WAIT_SECONDS)
 
         if not await lock.acquire():
             return {"status": ChatStatus.COMPLETE, "answer": "Your previous message is still being processed."}
@@ -318,7 +319,7 @@ class ParkingGraph:
         if not snapshot.values.get("notice_pending"):
             return {"status": ChatStatus.COMPLETE, "notice": None, "reservation_status": None}
 
-        lock = self._lock(thread_id, blocking_timeout=CHAT_LOCK_WAIT_SECONDS)
+        lock = self.lock(thread_id, blocking_timeout=CHAT_LOCK_WAIT_SECONDS)
         if not await lock.acquire():
             # A chat turn is running - it delivers the notice itself; poll again.
             return {"status": ChatStatus.COMPLETE, "notice": None, "reservation_status": None}
@@ -356,7 +357,7 @@ class ParkingGraph:
         """Resume a conversation paused for the administrator; returns the
         reservation's resulting status. Raises LookupError if that thread is
         not waiting on this reservation."""
-        async with self._lock(thread_id, blocking_timeout=ADMIN_LOCK_WAIT_SECONDS):
+        async with self.lock(thread_id, blocking_timeout=ADMIN_LOCK_WAIT_SECONDS):
             waiting = await self._waiting_for(thread_id)
             if waiting is None or waiting["reservation_id"] != str(reservation_id):
                 raise LookupError(reservation_id)

@@ -107,7 +107,7 @@ async def lifespan(app: FastAPI):
         parking_graph = ParkingGraph(llm, checkpointer, redis)
 
         # Pushed after the engine/checkpointer, so the stack cancels it before closing them.
-        cleanup_task = asyncio.create_task(run_chat_cleanup(engine, checkpointer))
+        cleanup_task = asyncio.create_task(run_chat_cleanup(engine, checkpointer, parking_graph.lock))
         stack.push_async_callback(_cancel, cleanup_task)
 
         app.state.db_engine = engine

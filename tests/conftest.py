@@ -74,7 +74,7 @@ async def db_session(engine: AsyncEngine) -> AsyncIterator[AsyncSession]:
 
 
 class FakeLock:
-    async def acquire(self):
+    async def acquire(self, *args, **kwargs):
         return True
 
     async def release(self):
