@@ -169,12 +169,7 @@ the insert run under a row lock, so two customers can't both take the last space
     ADMIN_API_KEY=... API_BASE_URL=http://localhost:8000 make admin-ui
     ```
 
-- **Tests** (unit + integration + e2e; spins up its own ephemeral Postgres via
-  testcontainers and fakes Redis, so no running stack is required):
-
-  ```bash
-  make test
-  ```
+- **Tests**: see [Running tests](#running-tests).
 
 - **RAG evaluation** (Precision@K/Recall@K against a hand-labelled golden set, plus
   retrieval and end-to-end `/chat` latency; requires the static docs to already be ingested).
@@ -191,6 +186,57 @@ the insert run under a row lock, so two customers can't both take the last space
 
   ```bash
   make load-test        # the chatbot; see the report for AdminUser / MCPUser
+  ```
+
+## Running tests
+
+The suite needs no running stack: integration and e2e tests start their own throwaway
+Postgres in Docker (testcontainers) - so **Docker must be running** - and the e2e tests also
+start a real MCP server process. Redis, Milvus and the LLM are stubbed or faked; no OpenAI
+key or network is needed.
+
+```bash
+make test                          # everything (same as `uv run pytest -s`)
+uv run pytest                      # everything, quieter
+uv run pytest tests/unit           # unit tests only - fast, no Docker needed
+uv run pytest tests/integration    # integration tests (Postgres in Docker)
+uv run pytest tests/e2e            # full flow: chat -> admin approval -> MCP file
+uv run pytest -k availability      # tests whose name matches a keyword
+uv run pytest tests/unit/test_parking_graph.py::test_cancel_clears_history_and_draft  # one test
+uv run pytest --cov=app --cov=mcp_server --cov-report=term-missing   # with coverage
+```
+
+| Folder | What it covers |
+| --- | --- |
+| `tests/unit/` | the graph and agents (with a scripted fake model), tools, guardrails, middleware, MCP server, config, rate limits, parsers, ingestion, evaluation metrics |
+| `tests/integration/` | repositories, availability and the no-overbooking lock, admin and chat APIs, chat cleanup, the dynamic-data import - against real Postgres |
+| `tests/e2e/` | the whole reservation flow through the real graph, Postgres checkpointer and MCP server |
+
+CI (`.github/workflows/ci.yml`) runs Ruff and the full suite on every push and pull request.
+Latest local run: 145 tests passing, 88% coverage of `app/` and `mcp_server/`.
+
+## Checking approved reservations
+
+Each approval is stored in two places:
+
+- **Postgres**, `reservations` table - approved ones have `status = 'approved'` and an
+  `approved_at` time (stored in UTC):
+
+  ```sql
+  SELECT first_name, surname, car_number, starts_at, ends_at, status, approved_at
+  FROM reservations ORDER BY created_at DESC LIMIT 10;
+  ```
+
+- **The MCP server's file** (`Name | Car Number | Reservation Period | Approval Time`), which
+  lives in the `mcp_reservations` Docker volume, not in the project folder:
+
+  ```bash
+  # read it
+  docker compose --env-file .env.development exec mcp-server cat /data/approved_reservations.txt
+  # watch new approvals arrive (Ctrl+C to stop)
+  docker compose --env-file .env.development exec mcp-server tail -f /data/approved_reservations.txt
+  # copy it into the project folder (a snapshot - run again to refresh; it is git-ignored)
+  docker compose --env-file .env.development cp mcp-server:/data/approved_reservations.txt ./approved_reservations.txt
   ```
 
 ## Deployment
