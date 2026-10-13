@@ -22,16 +22,16 @@ side effect; the service never calls the graph. Per-request dependencies
 arrive as runtime context (ChatContext).
 """
 
-from typing import Annotated, Literal, NotRequired, TypedDict
+from typing import Literal
 from uuid import UUID
 
 from langchain_core.language_models import BaseChatModel
-from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, RemoveMessage
+from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.errors import GraphRecursionError
 from langgraph.graph import END, START, StateGraph
-from langgraph.graph.message import REMOVE_ALL_MESSAGES, add_messages
+from langgraph.graph.message import REMOVE_ALL_MESSAGES
 from langgraph.runtime import Runtime
 from langgraph.types import Command
 from redis.asyncio import Redis
@@ -39,6 +39,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.ai.agents import build_admin_agent, build_user_agent
 from app.ai.guardrails import is_prompt_injection
+from app.ai.states import ParkingState
 from app.ai.tools import ChatContext
 from app.constants import (
     ADMIN_LOCK_WAIT_SECONDS,
@@ -50,19 +51,6 @@ from app.enums import ApprovalDecision, ChatStatus, ReservationStatus
 from app.logger import get_logger
 
 logger = get_logger(__name__)
-
-
-# Enum fields hold the enum's plain string value: the checkpointer only loads
-# its own registered types back, so enum members must not be persisted.
-class ParkingState(TypedDict):
-    messages: Annotated[list[AnyMessage], add_messages]
-    draft: NotRequired[dict | None]  # set by prepare_reservation, consumed by `confirm`
-    last_reservation_id: NotRequired[str | None]
-    decision: NotRequired[str | None]  # an ApprovalDecision value, set by ParkingGraph.resume
-    admin_note: NotRequired[str | None]
-    reservation_status: NotRequired[str | None]  # a ReservationStatus value
-    notice_pending: NotRequired[bool]  # the decision notice is still undelivered
-    submitted: NotRequired[bool]  # this turn's `confirm` saved a booking: route to `admin`
 
 
 def _reply(text: str, *, drop: str, **updates) -> dict:

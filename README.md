@@ -179,6 +179,7 @@ app/
     graph.py         ParkingGraph: the conversation workflow (user_agent -> admin -> record
                      -> notification) and its chat/updates/resume API
     agents.py        the user agent and the human-in-the-loop admin agent
+    states.py        state schemas: ParkingState (the graph's), UserAgentState
     tools.py         the agents' tools and ChatContext (per-request dependencies)
     middleware.py    agent middleware: current-time prompt, forced approval request
     guardrails.py    PII redaction (PIIGuard, PIIMiddleware) and prompt-injection check

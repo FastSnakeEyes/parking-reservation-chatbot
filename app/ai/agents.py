@@ -16,9 +16,7 @@ conversation's persistence and workflow:
    node then acts on that decision.
 """
 
-from typing import NotRequired
-
-from langchain.agents import AgentState, create_agent
+from langchain.agents import create_agent
 from langchain.agents.middleware import HumanInTheLoopMiddleware, SummarizationMiddleware
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import ToolCall
@@ -26,13 +24,10 @@ from langchain_core.messages import ToolCall
 from app.ai.guardrails import pii_middleware
 from app.ai.middleware import current_time_prompt, end_after_rejection, force_approval_request
 from app.ai.prompts import ADMIN_PROMPT, SUMMARY_PROMPT
+from app.ai.states import UserAgentState
 from app.ai.token_counting import count_tokens
 from app.ai.tools import ChatContext, create_parking_tools, request_admin_approval
 from app.config import settings
-
-
-class UserAgentState(AgentState):
-    draft: NotRequired[dict | None]  # set by prepare_reservation's Command
 
 
 def build_user_agent(llm: BaseChatModel, summary_llm: BaseChatModel | None = None):
