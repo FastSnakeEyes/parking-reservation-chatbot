@@ -230,6 +230,72 @@ async def test_the_admin_agent_makes_exactly_one_forced_model_call(lock_redis, p
     assert status == decision
 
 
+class PastStartReservations(FakeReservations):
+    async def validate_request(self, booking):
+        raise ValueError("Reservation start must be in the future")
+
+
+class UnknownParkingRepository(FakeRepository):
+    async def get_public_info(self, parking_id, on_date):
+        return None
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    ("attribute", "fake"),
+    [("reservation_repository", PastStartReservations), ("parking_repository", UnknownParkingRepository)],
+    ids=["invalid-booking", "unknown-parking"],
+)
+async def test_a_failed_review_goes_back_to_the_model(lock_redis, parking_service, attribute, fake):
+    """Not a 500, and not the raw error as the answer: the model explains it."""
+    setattr(parking_service, attribute, fake())
+    parking_graph = _graph(lock_redis, PREPARE, AIMessage(content="That time is not available - pick another?"))
+
+    result = await _chat(parking_graph, parking_service, "book it")
+
+    assert result["answer"] == "That time is not available - pick another?"
+    assert result["awaiting_confirmation"] is False
+
+
+class FlakyRecording(FakeService):
+    """record_decision fails until `fail` is cleared - e.g. the MCP server is down."""
+
+    fail = True
+
+    async def record_decision(self, reservation_id, *, approved, note=None):
+        if self.fail:
+            raise ConnectionError("MCP server unreachable")
+        return await super().record_decision(reservation_id, approved=approved, note=note)
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize("retry_decision", ["approved", "rejected"])
+async def test_a_failed_recording_keeps_waiting_and_can_be_retried(lock_redis, retry_decision):
+    parking_service = FlakyRecording()
+    parking_graph = _graph(lock_redis, PREPARE, *ADMIN_DRAFT)
+    context = ChatContext(parking_service=parking_service)
+
+    await _chat(parking_graph, parking_service, "book it")
+    await _chat(parking_graph, parking_service, "confirm")
+    reservation_id, _ = parking_service.booked[0]
+
+    with pytest.raises(ConnectionError):
+        await parking_graph.resume(THREAD, reservation_id, "approved", None, context)
+
+    # Still waiting on the administrator: the customer is told so, nothing restarts.
+    assert (await _chat(parking_graph, parking_service, "hello?"))["status"] == "waiting_for_admin"
+    assert (await parking_graph.updates(SESSION))["status"] == "waiting_for_admin"
+    assert "could not be recorded" in await parking_graph.pending_message(THREAD)
+
+    parking_service.fail = False
+    status = await parking_graph.resume(THREAD, reservation_id, retry_decision, None, context)
+
+    assert status == retry_decision  # the retry may revise the decision
+    assert parking_service.recorded == [(reservation_id, retry_decision == "approved")]
+    notice = await parking_graph.updates(SESSION)
+    assert notice["reservation_status"] == retry_decision
+
+
 @pytest.mark.asyncio
 async def test_resume_rejects_a_reservation_the_thread_is_not_waiting_on(lock_redis, parking_service):
     parking_graph = _graph(lock_redis, PREPARE, *ADMIN_DRAFT)

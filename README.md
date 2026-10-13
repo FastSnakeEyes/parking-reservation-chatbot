@@ -69,6 +69,10 @@ Pending reservations with no conversation awaiting approval (e.g. submitted befo
 reservations stored a `conversation_id`) can still be decided: the admin API then records the
 decision directly, without a customer notice.
 
+If recording fails after the decision (e.g. the MCP server is down), the reservation stays
+`pending` and the conversation keeps waiting; the admin console shows the failure, and
+submitting the decision again retries the failed step (the decision may be revised).
+
 ### Conversation memory
 
 Each chat session's history lives in its checkpointer thread. The user agent's
@@ -88,6 +92,9 @@ Each chat session's history lives in its checkpointer thread. The user agent's
 | `GET /admin/reservations` | Pending reservations with the admin agent's summary (`X-Admin-Key`) |
 | `POST /admin/reservations/{id}/decision` | `{decision: approved \| rejected, note?}` → `{status}` (`X-Admin-Key`) |
 | `GET /health` | API, Postgres and Redis health |
+
+The admin endpoints check `X-Admin-Key` in constant time; after 10 failed attempts within
+5 minutes, a client IP is refused (429) until the window expires.
 
 Reservation statuses: `pending` → `approved` (also written through MCP) or `rejected`.
 

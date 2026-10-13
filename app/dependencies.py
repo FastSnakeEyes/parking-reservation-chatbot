@@ -1,3 +1,4 @@
+import secrets
 import time
 from collections.abc import AsyncIterator
 from typing import Annotated
@@ -11,6 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.graph import ParkingGraph
 from app.config import settings
+from app.constants import ADMIN_AUTH_MAX_FAILURES, ADMIN_AUTH_WINDOW_SECONDS
 from app.db.repositories.milvus import MilvusRepository
 from app.db.repositories.parking import ParkingRepository
 from app.db.repositories.reservation import ReservationRepository
@@ -94,11 +96,28 @@ CookieDependency = Annotated[
 ]
 
 
-async def require_admin(x_admin_key: str = Header(default="")) -> None:
+async def require_admin(request: Request, x_admin_key: str = Header(default="")) -> None:
     """The admin API's guard (app/api/routers/admin.py): the X-Admin-Key header
-    must match settings.admin_api_key."""
-    if x_admin_key != settings.admin_api_key.get_secret_value():
-        logger.warning("Rejected an admin request with an invalid X-Admin-Key")
+    must match settings.admin_api_key. Compared in constant time, and a client
+    IP with too many failed attempts is locked out for a while, so the key
+    can't be guessed by timing or brute force."""
+    redis_conn = request.app.state.redis
+    client = request.client.host if request.client else "unknown"
+    failures_key = f"admin_auth_failures:{client}"
+
+    failures = int(await redis_conn.get(failures_key) or 0)
+    if failures >= ADMIN_AUTH_MAX_FAILURES:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="Too many failed admin key attempts. Try again later.",
+            headers={"Retry-After": str(ADMIN_AUTH_WINDOW_SECONDS)},
+        )
+
+    expected = settings.admin_api_key.get_secret_value()
+    if not secrets.compare_digest(x_admin_key.encode(), expected.encode()):
+        if await redis_conn.incr(failures_key) == 1:
+            await redis_conn.expire(failures_key, ADMIN_AUTH_WINDOW_SECONDS)
+        logger.warning("Rejected an admin request with an invalid X-Admin-Key (client=%s)", client)
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin key")
 
 

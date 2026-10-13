@@ -8,6 +8,7 @@ from app.dependencies import get_sql_session
 from app.schemas.chat import BookingInput
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from tests.conftest import CounterRedis
 
 THREAD_ID = "chat:test-session"
 
@@ -31,6 +32,7 @@ def build_test_app(db_session, parking_graph) -> FastAPI:
     app.include_router(admin_router)
     app.state.parking_graph = parking_graph
     app.state.vector_repository = None  # only the user agent's tools need it
+    app.state.redis = CounterRedis()  # require_admin's failed-attempt counter
 
     async def override_session():
         yield db_session
@@ -144,3 +146,22 @@ async def test_decision_without_a_conversation_is_recorded_directly(db_session, 
 
     reservation = await ReservationRepository(db_session).get_by_id(reservation_id)
     assert reservation.status == "rejected"
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
+async def test_repeated_wrong_admin_keys_lock_the_client_out(db_session, monkeypatch):
+    from app import dependencies
+
+    monkeypatch.setattr(dependencies, "ADMIN_AUTH_MAX_FAILURES", 3)
+    app = build_test_app(db_session, StubGraph())
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        wrong = [
+            (await client.get("/admin/reservations", headers={"X-Admin-Key": "guess"})).status_code for _ in range(3)
+        ]
+        # Locked out now - even the right key is refused until the window expires.
+        locked = await client.get("/admin/reservations", headers={"X-Admin-Key": "test-admin-key"})
+
+    assert wrong == [401, 401, 401]
+    assert locked.status_code == 429

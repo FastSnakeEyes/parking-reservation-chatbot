@@ -95,6 +95,23 @@ class LockOnlyRedis:
         return FakeLock()
 
 
+class CounterRedis:
+    """In-memory stand-in for the Redis counters require_admin uses (get/incr/expire)."""
+
+    def __init__(self):
+        self.values: dict[str, int] = {}
+
+    async def get(self, key):
+        return self.values.get(key)
+
+    async def incr(self, key):
+        self.values[key] = self.values.get(key, 0) + 1
+        return self.values[key]
+
+    async def expire(self, key, seconds):
+        return True
+
+
 @pytest.fixture
 def lock_redis():
     return LockOnlyRedis()

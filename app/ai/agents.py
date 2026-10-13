@@ -22,7 +22,7 @@ from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import ToolCall
 
 from app.ai.guardrails import pii_middleware
-from app.ai.middleware import current_time_prompt, end_after_rejection, force_approval_request
+from app.ai.middleware import current_time_prompt, end_after_rejection, end_after_review, force_approval_request
 from app.ai.prompts import ADMIN_PROMPT, SUMMARY_PROMPT
 from app.ai.states import UserAgentState
 from app.ai.token_counting import count_tokens
@@ -43,6 +43,7 @@ def build_user_agent(llm: BaseChatModel, summary_llm: BaseChatModel | None = Non
         context_schema=ChatContext,
         middleware=[
             current_time_prompt,
+            end_after_review,
             # PII first: summaries are built from already-redacted tool results.
             *pii_middleware(),
             SummarizationMiddleware(
@@ -60,8 +61,12 @@ def build_user_agent(llm: BaseChatModel, summary_llm: BaseChatModel | None = Non
 # Admin agent
 # --------------------------------------------------------------------------- #
 def _review_description(tool_call: ToolCall, _state, _runtime) -> str:
-    """What the administrator sees: the agent's summary of the reservation."""
-    return tool_call["args"]["summary"]
+    """What the administrator sees: the agent's summary of the reservation
+    (a plain fallback if the model's call came without one)."""
+    summary = tool_call.get("args", {}).get("summary")
+    return (
+        summary.strip() if isinstance(summary, str) and summary.strip() else "Please review this reservation request."
+    )
 
 
 def build_admin_agent(llm: BaseChatModel):

@@ -73,6 +73,9 @@ class ParkingService:
     async def approval_facts(self, reservation_id: UUID) -> dict:
         """The facts the admin agent drafts the approval request from."""
         reservation = await self.reservation_repository.get_by_id(reservation_id)
+        if reservation is None:
+            raise LookupError(f"Reservation {reservation_id} not found")
+
         info = await self.parking_repository.get_public_info(
             parking_id=reservation.parking_id,
             on_date=reservation.starts_at.astimezone(self.timezone).date(),

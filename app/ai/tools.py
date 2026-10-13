@@ -3,7 +3,6 @@ from datetime import date, datetime
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
-import sqlalchemy as sa
 from fastapi.encoders import jsonable_encoder
 from langchain.tools import ToolRuntime
 from langchain_core.messages import ToolMessage
@@ -13,7 +12,6 @@ from starlette.concurrency import run_in_threadpool
 
 from app.ai.guardrails import get_pii_guard
 from app.config import settings
-from app.db.models import Parking
 from app.enums import SpaceType
 from app.logger import get_logger
 from app.schemas.chat import BookingInput
@@ -43,15 +41,7 @@ def create_parking_tools() -> list[BaseTool]:
     async def list_parkings(runtime: ToolRuntime[ChatContext]) -> dict:
         """List public parking IDs, names, and districts."""
 
-        result = await runtime.context.parking_service.parking_repository.session.execute(
-            sa.select(
-                Parking.id,
-                Parking.name,
-                Parking.district,
-            ).order_by(Parking.id)
-        )
-
-        return {"parkings": [dict(row) for row in result.mappings().all()]}
+        return {"parkings": await runtime.context.parking_service.parking_repository.list_public()}
 
     @tool
     async def get_parking_info(
@@ -118,10 +108,11 @@ def create_parking_tools() -> list[BaseTool]:
 
         return {"documents": results}
 
-    # return_direct: the review below is the turn's final answer, shown
-    # verbatim (exact price/hours/availability) rather than trusting the
-    # model's retelling of it.
-    @tool(args_schema=BookingInput, return_direct=True)
+    # A successful review is the turn's final answer, shown verbatim (exact
+    # price/hours/availability) rather than the model's retelling: the
+    # end_after_review middleware ends the turn once it sets the draft. Not
+    # return_direct - an error result must go back to the model to explain.
+    @tool(args_schema=BookingInput)
     async def prepare_reservation(
         parking_id: int,
         space_type: SpaceType,
@@ -147,7 +138,11 @@ def create_parking_tools() -> list[BaseTool]:
             ends_at=ends_at,
         )
 
-        await runtime.context.parking_service.reservation_repository.validate_request(booking)
+        try:
+            await runtime.context.parking_service.reservation_repository.validate_request(booking)
+        except ValueError as exc:
+            # e.g. a start in the past, an unknown or non-bookable space type
+            return {"error": f"Cannot prepare this reservation: {exc}. Ask the customer to correct it."}
 
         info = await runtime.context.parking_service.parking_repository.get_public_info(
             parking_id=parking_id,
@@ -195,7 +190,7 @@ def create_parking_tools() -> list[BaseTool]:
             f"Starting-date hours: {schedule}\n\n"
             "This is not a total price quote or a guaranteed space. "
             "The request requires administrator approval.\n"
-            "Type confirm to submit, cancel to discard, "
+            "Press Confirm (or type confirm) to submit, Cancel to discard, "
             "or describe a correction."
         )
 

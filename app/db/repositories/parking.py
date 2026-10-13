@@ -23,6 +23,11 @@ class ParkingRepository(PostgresRepository[Parking]):
         super().__init__(session=session, model=Parking)
         self.timezone = ZoneInfo(settings.timezone)
 
+    async def list_public(self) -> list[dict[str, Any]]:
+        """Every parking's public id, name and district."""
+        result = await self.session.execute(sa.select(Parking.id, Parking.name, Parking.district).order_by(Parking.id))
+        return [dict(row) for row in result.mappings().all()]
+
     async def get_working_hours(
         self,
         parking_id: int,

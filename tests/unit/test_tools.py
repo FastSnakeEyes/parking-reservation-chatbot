@@ -18,3 +18,13 @@ def test_tool_schema_builds_for_the_model(tool):
     assert schema["function"]["name"] == tool.name
     # The injected runtime is never exposed to the model as an argument.
     assert "runtime" not in schema["function"]["parameters"].get("properties", {})
+
+
+def test_review_description_falls_back_without_a_summary():
+    from app.ai.agents import _review_description
+
+    with_summary = {"name": "request_admin_approval", "args": {"summary": " Approve Jane? "}, "id": "1"}
+    without = {"name": "request_admin_approval", "args": {}, "id": "2"}
+
+    assert _review_description(with_summary, None, None) == "Approve Jane?"
+    assert _review_description(without, None, None) == "Please review this reservation request."

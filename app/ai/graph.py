@@ -235,15 +235,31 @@ class ParkingGraph:
         )
 
     async def _waiting_for(self, thread_id: str) -> dict | None:
-        """{"reservation_id", "message"} if the thread is paused for the
-        administrator's review (the admin agent's HumanInTheLoopMiddleware interrupt)."""
+        """{"reservation_id", "message", "stalled"} if the thread is waiting on the
+        administrator: paused for their review (the admin agent's
+        HumanInTheLoopMiddleware interrupt), or stalled after their decision
+        because a later step failed (e.g. the MCP server was down while
+        recording) - resume() retries that step."""
         snapshot = await self.graph.aget_state(self._config(thread_id))
+        reservation_id = snapshot.values.get("last_reservation_id")
+
         for task in snapshot.tasks:
             for pending in task.interrupts:
                 return {
-                    "reservation_id": snapshot.values.get("last_reservation_id"),
+                    "reservation_id": reservation_id,
                     "message": pending.value["action_requests"][0]["description"],
+                    "stalled": False,
                 }
+
+        if snapshot.next and any(task.error for task in snapshot.tasks):
+            return {
+                "reservation_id": reservation_id,
+                "message": (
+                    f"The decision ({snapshot.values.get('decision')}) could not be recorded "
+                    f"(step '{snapshot.next[0]}' failed). Submit a decision again to retry."
+                ),
+                "stalled": True,
+            }
         return None
 
     async def chat(self, session_id: str, question: str, context: ChatContext) -> dict:
@@ -346,6 +362,20 @@ class ParkingGraph:
                 raise LookupError(reservation_id)
 
             decision = ApprovalDecision(decision)
+            config = self._config(thread_id)
+
+            if waiting["stalled"]:
+                # A step after the decision failed: record the (possibly revised)
+                # decision as if `admin` had just finished, then run on from there.
+                logger.warning(
+                    "Retrying the stalled approval of reservation %s (decision=%s)", reservation_id, decision
+                )
+                await self.graph.aupdate_state(
+                    config, {"decision": decision.value, "admin_note": note}, as_node="admin"
+                )
+                result = await self.graph.ainvoke(None, config=config, context=context, durability="exit")
+                return ReservationStatus(result["reservation_status"])
+
             if decision == ApprovalDecision.APPROVED:
                 review = {"type": "approve"}
             else:
@@ -359,7 +389,7 @@ class ParkingGraph:
                     resume={"decisions": [review]},
                     update={"decision": decision.value, "admin_note": note},
                 ),
-                config=self._config(thread_id),
+                config=config,
                 context=context,
                 durability="exit",
             )

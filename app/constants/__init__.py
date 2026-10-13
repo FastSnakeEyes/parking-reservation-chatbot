@@ -2,6 +2,7 @@
 re-exported here: `from app.constants import CHAT_THREAD_PREFIX`.
 Unlike app/config.py's settings, these are not configurable per environment."""
 
+from app.constants.admin import ADMIN_AUTH_MAX_FAILURES, ADMIN_AUTH_WINDOW_SECONDS
 from app.constants.chat import (
     ADMIN_LOCK_WAIT_SECONDS,
     CHAT_LOCK_WAIT_SECONDS,
@@ -25,6 +26,8 @@ from app.constants.llm import LLM_MAX_RETRIES, LLM_TEMPERATURE, LLM_TIMEOUT_SECO
 from app.constants.paths import APP_DIR, BASE_DIR, STATIC_DIR, STATIC_DOCS_DIR, TEMPLATES_DIR
 
 __all__ = [
+    "ADMIN_AUTH_MAX_FAILURES",
+    "ADMIN_AUTH_WINDOW_SECONDS",
     "ADMIN_LOCK_WAIT_SECONDS",
     "APP_DIR",
     "BASE_DIR",

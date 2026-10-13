@@ -4,7 +4,8 @@ from collections.abc import Awaitable, Callable
 from datetime import datetime
 from zoneinfo import ZoneInfo
 
-from langchain.agents.middleware import ModelRequest, ModelResponse, dynamic_prompt, wrap_model_call
+from langchain.agents import AgentState
+from langchain.agents.middleware import ModelRequest, ModelResponse, before_model, dynamic_prompt, wrap_model_call
 from langchain_core.messages import AIMessage, ToolMessage
 
 from app.ai.prompts import SYSTEM_PROMPT
@@ -18,6 +19,18 @@ def current_time_prompt(_request: ModelRequest) -> str:
     on every model call so relative dates ("tomorrow", "Friday") resolve correctly."""
     now = datetime.now(ZoneInfo(settings.timezone)).strftime(f"%A %Y-%m-%d %H:%M ({settings.timezone})")
     return f"{SYSTEM_PROMPT}\n\nCurrent local date/time: {now}."
+
+
+@before_model(can_jump_to=["end"])
+def end_after_review(state: AgentState, _runtime) -> dict | None:
+    """End the user agent's turn right after prepare_reservation produced a
+    review (it set the draft): the review is the answer, verbatim. A failed
+    prepare_reservation leaves no draft, so the model sees the error and
+    explains it to the customer."""
+    last = state["messages"][-1] if state["messages"] else None
+    if isinstance(last, ToolMessage) and last.name == "prepare_reservation" and state.get("draft") is not None:
+        return {"jump_to": "end"}
+    return None
 
 
 @wrap_model_call
