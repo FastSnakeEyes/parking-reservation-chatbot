@@ -11,7 +11,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.graph import ParkingGraph
 from app.config import settings
-from app.db.repositories.base import AbstractVectorRepository
 from app.db.repositories.milvus import MilvusRepository
 from app.db.repositories.parking import ParkingRepository
 from app.db.repositories.reservation import ReservationRepository
@@ -43,12 +42,6 @@ def create_vector_repository() -> MilvusRepository:
         collection_name=settings.milvus_collection,
         embedding_model=settings.embedding_model,
     )
-
-
-def get_vector_repository(
-    request: Request,
-) -> AbstractVectorRepository:
-    return request.app.state.vector_repository
 
 
 async def get_sql_session(
@@ -186,9 +179,4 @@ def get_parking_graph(request: Request) -> ParkingGraph:
 ParkingGraphDependency = Annotated[
     ParkingGraph,
     Depends(get_parking_graph),
-]
-
-VectorRepositoryDependency = Annotated[
-    AbstractVectorRepository,
-    Depends(get_vector_repository),
 ]

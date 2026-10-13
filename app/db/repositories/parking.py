@@ -23,12 +23,6 @@ class ParkingRepository(PostgresRepository[Parking]):
         super().__init__(session=session, model=Parking)
         self.timezone = ZoneInfo(settings.timezone)
 
-    async def get_by_slug(self, slug: str) -> Parking | None:
-        statement = sa.select(Parking).where(
-            Parking.slug == slug,
-        )
-        return await self.session.scalar(statement)
-
     async def get_working_hours(
         self,
         parking_id: int,

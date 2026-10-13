@@ -27,7 +27,6 @@ from collections.abc import AsyncIterator
 from datetime import date, time
 from uuid import uuid4
 
-import fakeredis
 import pytest
 import pytest_asyncio
 from app.db.models import Base, Parking, ParkingSpaceType, Price, WorkingHours
@@ -89,7 +88,8 @@ class FakeLock:
 
 
 class LockOnlyRedis:
-    """Only ParkingGraph's per-thread lock; fakeredis can't run its Lua release script."""
+    """Only ParkingGraph's per-thread lock. A real redis-py lock releases via a Lua
+    script, which in-memory Redis fakes can't run - so tests stub the lock itself."""
 
     def lock(self, *args, **kwargs):
         return FakeLock()
@@ -110,11 +110,6 @@ async def checkpointer(postgres_container):
     async with AsyncPostgresSaver.from_conn_string(url) as saver:
         await saver.setup()
         yield saver
-
-
-@pytest.fixture
-def fake_redis():
-    return fakeredis.aioredis.FakeRedis(decode_responses=True)
 
 
 @pytest_asyncio.fixture
