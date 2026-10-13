@@ -90,10 +90,6 @@ class ParkingService:
     async def list_pending(self) -> list[Reservation]:
         return await self.reservation_repository.list_pending()
 
-    async def get_status(self, reservation_id: UUID) -> ReservationStatus | None:
-        reservation = await self.reservation_repository.get_by_id(reservation_id)
-        return ReservationStatus(reservation.status) if reservation else None
-
     async def get_pending(self, reservation_id: UUID) -> Reservation | None:
         reservation = await self.reservation_repository.get_by_id(reservation_id)
 

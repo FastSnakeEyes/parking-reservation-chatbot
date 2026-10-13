@@ -9,11 +9,12 @@ import pytest
 from app.ai import graph as graph_module
 from app.ai.graph import ParkingGraph
 from app.ai.token_counting import get_token_counter
-from app.ai.tools import ChatContext, record_reservation
+from app.ai.tools import ChatContext, approve_reservation
 from app.config import settings
 from langchain_core.language_models.fake_chat_models import FakeMessagesListChatModel
 from langchain_core.messages import AIMessage
 from langgraph.checkpoint.memory import InMemorySaver
+from pydantic import Field
 
 STARTS_AT = datetime.now(UTC) + timedelta(days=1)
 SESSION = "test-session"
@@ -30,20 +31,24 @@ BOOKING_ARGS = {
 }
 
 PREPARE = AIMessage(content="", tool_calls=[{"name": "prepare_reservation", "args": BOOKING_ARGS, "id": "c1"}])
-# The admin agent's turn: it proposes record_reservation (paused for the
+# The admin agent's turn: it proposes approve_reservation (paused for the
 # administrator's review), then, once resumed, a closing message.
 ADMIN_DRAFT = [
     AIMessage(
-        content="", tool_calls=[{"name": record_reservation.name, "args": {"summary": "Approve Jane?"}, "id": "a1"}]
+        content="", tool_calls=[{"name": approve_reservation.name, "args": {"summary": "Approve Jane?"}, "id": "a1"}]
     ),
     AIMessage(content="Done."),
 ]
 
 
 class ScriptedModel(FakeMessagesListChatModel):
-    """Both agents share it, so its responses are consumed in turn order."""
+    """Both agents share it, so its responses are consumed in turn order.
+    Records each call's tool_choice (FakeMessagesListChatModel itself ignores it)."""
+
+    tool_choices: list = Field(default_factory=list)
 
     def bind_tools(self, tools, *, tool_choice=None, **kwargs):
+        self.tool_choices.append(tool_choice)
         return self
 
 
@@ -70,24 +75,18 @@ class FakeService:
         self.vector_repository = None
         self.booked: list[tuple[UUID, str]] = []
         self.recorded: list[tuple[UUID, bool]] = []
-        self.statuses: dict[UUID, str] = {}
 
     async def book(self, draft, conversation_id):
         reservation_id = UUID(draft["id"])
         self.booked.append((reservation_id, conversation_id))
-        self.statuses[reservation_id] = "pending"
         return reservation_id
-
-    async def get_status(self, reservation_id):
-        return self.statuses.get(reservation_id)
 
     async def approval_facts(self, reservation_id):
         return {"Reservation ID": str(reservation_id), "Customer": "Jane Doe"}
 
     async def record_decision(self, reservation_id, *, approved, note=None):
         self.recorded.append((reservation_id, approved))
-        self.statuses[reservation_id] = "recorded" if approved else "rejected"
-        return self.statuses[reservation_id]
+        return "recorded" if approved else "rejected"
 
 
 @pytest.fixture(autouse=True)
@@ -179,7 +178,6 @@ async def test_a_rejected_review_never_runs_the_tool(lock_redis, parking_service
     )
 
     assert status == "rejected"
-    # Only the graph's rejection - record_reservation (approved=True) never ran.
     assert parking_service.recorded == [(reservation_id, False)]
 
     notice = await _chat(parking_graph, parking_service, "any news?")
@@ -187,22 +185,18 @@ async def test_a_rejected_review_never_runs_the_tool(lock_redis, parking_service
 
 
 @pytest.mark.asyncio
-async def test_falls_back_to_a_manual_review_if_the_agent_skips_its_tool(lock_redis, parking_service):
-    parking_graph = _graph(lock_redis, PREPARE, AIMessage(content="I forgot to call the tool."))
+async def test_the_admin_agent_is_forced_to_request_approval_only_once(lock_redis, parking_service):
+    model = ScriptedModel(responses=[PREPARE, *ADMIN_DRAFT])
+    parking_graph = ParkingGraph(model, InMemorySaver(), lock_redis)
 
     await _chat(parking_graph, parking_service, "book it")
-    confirmed = await _chat(parking_graph, parking_service, "confirm")
+    await _chat(parking_graph, parking_service, "confirm")
     reservation_id, _ = parking_service.booked[0]
+    await parking_graph.resume(THREAD, reservation_id, "approved", None, ChatContext(parking_service=parking_service))
 
-    assert confirmed["status"] == "waiting_for_admin"
-    assert (await parking_graph.pending_message(THREAD)).startswith("Please approve or refuse this reservation")
-
-    status = await parking_graph.resume(
-        THREAD, reservation_id, "approved", None, ChatContext(parking_service=parking_service)
-    )
-
-    assert status == "recorded"
-    assert parking_service.recorded == [(reservation_id, True)]
+    # user agent's turn, then the admin agent's first call (forced) and its
+    # closing call after the decision (free - forcing it would loop forever).
+    assert model.tool_choices == [None, approve_reservation.name, None]
 
 
 @pytest.mark.asyncio

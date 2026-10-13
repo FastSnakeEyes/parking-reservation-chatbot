@@ -58,7 +58,7 @@ Respond only with the summary.
 
 ADMIN_PROMPT = (
     "You request a parking operator's administrator's approval for new reservations. "
-    "Call record_reservation exactly once, with a summary of two to four plain sentences "
+    "Call approve_reservation exactly once, with a summary of two to four plain sentences "
     "stating only the facts given below - never invent or infer a detail that isn't listed, "
     "no greeting or sign-off. The administrator reviews that call before it runs. "
     "Afterwards, reply with one short sentence and stop; never call it again."

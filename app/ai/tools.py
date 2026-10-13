@@ -1,7 +1,7 @@
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import TYPE_CHECKING, Any
-from uuid import UUID, uuid4
+from typing import TYPE_CHECKING
+from uuid import uuid4
 from zoneinfo import ZoneInfo
 
 import sqlalchemy as sa
@@ -219,17 +219,13 @@ def create_parking_tools() -> list[BaseTool]:
 # Admin agent tools
 # --------------------------------------------------------------------------- #
 @tool
-async def record_reservation(summary: str, runtime: ToolRuntime[Any]) -> str:
-    """Record the reservation under review. The administrator reviews this call
-    before it runs, so it only runs once they approve the reservation.
+def approve_reservation(summary: str) -> str:
+    """Ask the administrator to approve the reservation under review.
 
     Args:
         summary: Two to four plain sentences describing the reservation for the administrator.
     """
-    # ToolRuntime[Any], not [ChatContext]: a module-level tool's schema is built from
-    # its annotations, and ChatContext's "ParkingService" can't be resolved here
-    # (import cycle). runtime.context is still the ChatContext.
-    # Which reservation comes from the agent's state, not from the model.
-    reservation_id = UUID(runtime.state["reservation_id"])
-    status = await runtime.context.parking_service.record_decision(reservation_id, approved=True)
-    return f"Reservation {reservation_id} is now {status}."
+    # Paused by HumanInTheLoopMiddleware until the administrator decides; it only
+    # runs once approved. The decision itself is acted on by ParkingGraph's
+    # `recording` node, not here.
+    return "The administrator approved the reservation."

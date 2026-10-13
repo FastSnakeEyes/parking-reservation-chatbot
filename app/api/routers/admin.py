@@ -7,23 +7,16 @@ agent's review (app/ai/graph.py); a decision resumes that conversation's thread.
 
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 
 from app.ai.tools import ChatContext
-from app.config import settings
-from app.dependencies import ParkingGraphDependency, ParkingServiceDependency
+from app.dependencies import ParkingGraphDependency, ParkingServiceDependency, require_admin
 from app.logger import get_logger
 from app.schemas.admin import DecisionRequest, DecisionResponse, PendingReservation
 
 logger = get_logger(__name__)
 
 router = APIRouter(prefix="/admin", tags=["admin"])
-
-
-async def require_admin(x_admin_key: str = Header(default="")) -> None:
-    if x_admin_key != settings.admin_api_key.get_secret_value():
-        logger.warning("Rejected an admin request with an invalid X-Admin-Key")
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin key")
 
 
 @router.get(

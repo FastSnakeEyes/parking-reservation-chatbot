@@ -3,7 +3,7 @@ from collections.abc import AsyncIterator
 from typing import Annotated
 from uuid import UUID
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, Header, HTTPException, Request, status
 from langchain_openai import OpenAIEmbeddings
 from pymilvus import MilvusClient
 from redis.asyncio import Redis
@@ -15,7 +15,10 @@ from app.db.repositories.base import AbstractVectorRepository
 from app.db.repositories.milvus import MilvusRepository
 from app.db.repositories.parking import ParkingRepository
 from app.db.repositories.reservation import ReservationRepository
+from app.logger import get_logger
 from app.services.parking import ParkingService
+
+logger = get_logger(__name__)
 
 
 def create_vector_repository() -> MilvusRepository:
@@ -96,6 +99,14 @@ CookieDependency = Annotated[
     str,
     Depends(require_cookie),
 ]
+
+
+async def require_admin(x_admin_key: str = Header(default="")) -> None:
+    """The admin API's guard (app/api/routers/admin.py): the X-Admin-Key header
+    must match settings.admin_api_key."""
+    if x_admin_key != settings.admin_api_key.get_secret_value():
+        logger.warning("Rejected an admin request with an invalid X-Admin-Key")
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid admin key")
 
 
 async def cookie_rate_limit(
