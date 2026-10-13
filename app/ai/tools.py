@@ -1,6 +1,5 @@
 from dataclasses import dataclass, field
 from datetime import date, datetime
-from typing import TYPE_CHECKING
 from uuid import uuid4
 from zoneinfo import ZoneInfo
 
@@ -18,11 +17,9 @@ from app.db.models import Parking
 from app.enums import SpaceType
 from app.logger import get_logger
 from app.schemas.chat import BookingInput
+from app.services.parking import ParkingService
 
 logger = get_logger(__name__)
-
-if TYPE_CHECKING:
-    from app.services.parking import ParkingService
 
 
 @dataclass
@@ -33,7 +30,9 @@ class ChatContext:
     request - the ParkingService over the request-scoped DB session, and the
     sources cited in this turn's answer - arrives here through runtime.context."""
 
-    parking_service: "ParkingService"
+    # A real import, not a TYPE_CHECKING one: building each tool's schema for the
+    # model (bind_tools) resolves ToolRuntime[ChatContext] down to this field.
+    parking_service: ParkingService
     sources: list[dict] = field(default_factory=list)
 
 
@@ -227,5 +226,5 @@ def approve_reservation(summary: str) -> str:
     """
     # Paused by HumanInTheLoopMiddleware until the administrator decides; it only
     # runs once approved. The decision itself is acted on by ParkingGraph's
-    # `recording` node, not here.
+    # `record` node, not here.
     return "The administrator approved the reservation."

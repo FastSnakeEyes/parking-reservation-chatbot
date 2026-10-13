@@ -12,7 +12,7 @@ conversation's persistence and workflow:
    it proposes an `approve_reservation` call whose summary describes the
    reservation, and HumanInTheLoopMiddleware pauses on it until the
    administrator approves or rejects it through the admin API
-   (app/api/routers/admin.py, ui/admin_app.py). ParkingGraph's `recording`
+   (app/api/routers/admin.py, ui/admin_app.py). ParkingGraph's `record`
    node then acts on that decision.
 """
 
@@ -70,7 +70,7 @@ def _review_description(tool_call: ToolCall, _state, _runtime) -> str:
 
 
 def build_admin_agent(llm: BaseChatModel):
-    """Run as ParkingGraph's `admin_agent` node; its interrupt pauses the whole
+    """Run as ParkingGraph's `admin` node; its interrupt pauses the whole
     conversation until ParkingGraph.resume() delivers the decision."""
     return create_agent(
         model=llm,

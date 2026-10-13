@@ -1,22 +1,21 @@
 """ParkingGraph: the whole customer conversation as one LangGraph workflow,
 one checkpointer thread per chat session ("chat:{session_id}").
 
-    START -> route_input -+-> user_agent -------------------------------------> END
-                          +-> admin_agent -> recording -> send_notification -> END
-                          +-> END   (notice / injection / cancel / nothing to confirm)
+    START -> user_agent -+-> admin -> record -> notification -> END   (after `confirm`)
+                         +-> END                                       (any other turn)
 
-- route_input: deterministic, model-free handling of the turn - the admin's
-  decision notice, prompt injection, `cancel`, and `confirm`, which saves the
-  reviewed booking as a pending reservation (the model cannot authorize a DB
-  write). Everything else goes to the user agent.
-- user_agent: answers or prepares a review (app/ai/agents.py).
-- admin_agent: the human-in-the-loop admin agent proposes approving the
+- user_agent: the customer's turn. Commands are handled first, without the
+  model: the admin's decision notice, prompt injection, `cancel`, and
+  `confirm`, which saves the reviewed booking as a pending reservation (the
+  model cannot authorize a DB write) and hands it to `admin`. Everything else
+  goes to the user agent (app/ai/agents.py), which answers or prepares a review.
+- admin: the human-in-the-loop admin agent proposes approving the
   reservation; its HumanInTheLoopMiddleware pauses the whole thread until the
   admin API resumes it (ParkingGraph.resume) - so while a reservation awaits
   approval, the conversation waits too.
-- recording: acts on the decision - records an approval through MCP, or
-  marks the reservation rejected.
-- send_notification: leaves the customer the outcome for their next message.
+- record: acts on the decision - records an approval through MCP, or marks
+  the reservation rejected.
+- notification: leaves the customer the outcome for their next message.
 
 The graph calls ParkingService (app/services/parking.py) for every DB/MCP
 side effect; the service never calls the graph. Per-request dependencies
@@ -63,93 +62,97 @@ class ParkingState(TypedDict):
     admin_note: NotRequired[str | None]
     reservation_status: NotRequired[str | None]  # a ReservationStatus value
     notice_pending: NotRequired[bool]  # the decision notice is still undelivered
+    submitted: NotRequired[bool]  # this turn's `confirm` saved a booking: route to `admin`
 
 
-def _reply(text: str, *, drop: str, **updates) -> Command:
-    """End the turn answering `text`. `drop` removes the triggering human message
-    (or, with REMOVE_ALL_MESSAGES, the whole conversation) from the history."""
-    return Command(update={"messages": [RemoveMessage(id=drop), AIMessage(content=text)], **updates}, goto=END)
+def _reply(text: str, *, drop: str, **updates) -> dict:
+    """Answer `text`. `drop` removes the triggering human message (or, with
+    REMOVE_ALL_MESSAGES, the whole conversation) from the history."""
+    return {"messages": [RemoveMessage(id=drop), AIMessage(content=text)], **updates}
+
+
+async def _handle_command(state: ParkingState, runtime: Runtime[ChatContext], config: RunnableConfig) -> dict | None:
+    """The deterministic, model-free part of the customer's turn: its state
+    updates, or None when the message is for the user agent."""
+    question = state["messages"][-1]
+    text = str(question.content).strip()
+
+    if state.get("notice_pending"):
+        # The decision notice is already the last message (notification);
+        # dropping the question makes it this turn's answer.
+        return {"messages": [RemoveMessage(id=question.id)], "notice_pending": False}
+
+    if await run_in_threadpool(is_prompt_injection, text):
+        logger.warning("Blocked a suspected prompt injection")
+        # Dropped from the history too, so it never reaches the model on a later turn.
+        return _reply(
+            "I can't process that request. Please ask about parking information or reservations.",
+            drop=question.id,
+        )
+
+    command = text.casefold()
+
+    if command == "cancel":
+        return _reply("The conversation and unsent booking draft were cleared.", drop=REMOVE_ALL_MESSAGES, draft=None)
+
+    if command != "confirm":
+        return None
+
+    if state.get("draft") is None:
+        previous_id = state.get("last_reservation_id")
+        if previous_id:
+            return _reply(f"Your previous request was already submitted.\nReference: {previous_id}", drop=question.id)
+        return _reply("There is no reviewed reservation to confirm.", drop=question.id)
+
+    # Saved here, not in `admin`: a node's updates are only committed when it
+    # finishes, and `admin` pauses until the administrator decides.
+    try:
+        reservation_id = await runtime.context.parking_service.book(
+            state["draft"], conversation_id=config["configurable"]["thread_id"]
+        )
+    except ValueError as exc:
+        return _reply(
+            f"The request cannot be submitted: {exc}. Please provide corrected details.",
+            drop=question.id,
+            draft=None,
+        )
+
+    # Start fresh after a submitted booking.
+    return {
+        "messages": [
+            RemoveMessage(id=REMOVE_ALL_MESSAGES),
+            AIMessage(
+                "Your reservation request was saved and is awaiting administrator approval.\n"
+                f"Reference: {reservation_id}"
+            ),
+        ],
+        "draft": None,
+        "last_reservation_id": str(reservation_id),
+        "reservation_status": ReservationStatus.PENDING.value,
+        "submitted": True,
+    }
+
+
+def _after_user_agent(state: ParkingState) -> Literal["admin", "__end__"]:
+    """A booking saved by this turn's `confirm` goes to the administrator."""
+    return "admin" if state.get("submitted") else END
 
 
 def _build_graph(llm: BaseChatModel, checkpointer: BaseCheckpointSaver):
     user_agent = build_user_agent(llm)
     admin_agent = build_admin_agent(llm)
 
-    # -- Node: deterministic handling of the customer's message ------------- #
-    async def route_input(
+    # -- Node: the customer's turn ------------------------------------------ #
+    async def user_agent_node(
         state: ParkingState,
         runtime: Runtime[ChatContext],
         config: RunnableConfig,
-    ) -> Command[Literal["user_agent", "admin_agent", "__end__"]]:
-        question = state["messages"][-1]
-        text = str(question.content).strip()
+    ) -> dict:
+        # `submitted` is set fresh every turn; only `confirm` sets it to True.
+        if (updates := await _handle_command(state, runtime, config)) is not None:
+            return {"submitted": False, **updates}
 
-        if state.get("notice_pending"):
-            # The decision notice is already the last message (send_notification);
-            # dropping the question makes it this turn's answer.
-            return Command(update={"messages": [RemoveMessage(id=question.id)], "notice_pending": False}, goto=END)
-
-        if await run_in_threadpool(is_prompt_injection, text):
-            logger.warning("Blocked a suspected prompt injection")
-            # Dropped from the history too, so it never reaches the model on a later turn.
-            return _reply(
-                "I can't process that request. Please ask about parking information or reservations.",
-                drop=question.id,
-            )
-
-        command = text.casefold()
-
-        if command == "cancel":
-            return _reply(
-                "The conversation and unsent booking draft were cleared.",
-                drop=REMOVE_ALL_MESSAGES,
-                draft=None,
-            )
-
-        if command == "confirm":
-            if state.get("draft") is None:
-                previous_id = state.get("last_reservation_id")
-                if previous_id:
-                    return _reply(
-                        f"Your previous request was already submitted.\nReference: {previous_id}", drop=question.id
-                    )
-                return _reply("There is no reviewed reservation to confirm.", drop=question.id)
-
-            # Saved here, not in admin_agent: a node's updates are only committed
-            # when it finishes, and admin_agent pauses until the admin decides.
-            try:
-                reservation_id = await runtime.context.parking_service.book(
-                    state["draft"], conversation_id=config["configurable"]["thread_id"]
-                )
-            except ValueError as exc:
-                return _reply(
-                    f"The request cannot be submitted: {exc}. Please provide corrected details.",
-                    drop=question.id,
-                    draft=None,
-                )
-
-            # Start fresh after a submitted booking.
-            return Command(
-                update={
-                    "messages": [
-                        RemoveMessage(id=REMOVE_ALL_MESSAGES),
-                        AIMessage(
-                            "Your reservation request was saved and is awaiting administrator approval.\n"
-                            f"Reference: {reservation_id}"
-                        ),
-                    ],
-                    "draft": None,
-                    "last_reservation_id": str(reservation_id),
-                    "reservation_status": ReservationStatus.PENDING.value,
-                },
-                goto="admin_agent",
-            )
-
-        # Invalidate an old review before processing a correction.
-        return Command(update={"draft": None}, goto="user_agent")
-
-    # -- Node: the user agent answers / prepares a review -------------------- #
-    async def user_agent_node(state: ParkingState, runtime: Runtime[ChatContext]) -> dict:
+        # Anything else invalidates an old review (a correction prepares a new one).
         result = await user_agent.ainvoke(
             {"messages": state["messages"], "draft": None},
             context=runtime.context,
@@ -159,10 +162,11 @@ def _build_graph(llm: BaseChatModel, checkpointer: BaseCheckpointSaver):
         return {
             "messages": [RemoveMessage(id=REMOVE_ALL_MESSAGES), *result["messages"]],
             "draft": result.get("draft"),
+            "submitted": False,
         }
 
     # -- Node: the human-in-the-loop admin agent ---------------------------- #
-    async def admin_agent_node(state: ParkingState, runtime: Runtime[ChatContext]) -> dict:
+    async def admin(state: ParkingState, runtime: Runtime[ChatContext]) -> dict:
         facts = await runtime.context.parking_service.approval_facts(UUID(state["last_reservation_id"]))
         request = "\n".join(f"{key}: {value}" for key, value in facts.items())
 
@@ -178,7 +182,7 @@ def _build_graph(llm: BaseChatModel, checkpointer: BaseCheckpointSaver):
         return {}
 
     # -- Node: act on the administrator's decision ------------------------- #
-    async def recording(state: ParkingState, runtime: Runtime[ChatContext]) -> dict:
+    async def record(state: ParkingState, runtime: Runtime[ChatContext]) -> dict:
         status = await runtime.context.parking_service.record_decision(
             UUID(state["last_reservation_id"]),
             approved=state["decision"] == ApprovalDecision.APPROVED,
@@ -187,7 +191,7 @@ def _build_graph(llm: BaseChatModel, checkpointer: BaseCheckpointSaver):
         return {"reservation_status": str(status)}
 
     # -- Node: tell the customer the outcome on their next message ---------- #
-    def send_notification(state: ParkingState) -> dict:
+    def notification(state: ParkingState) -> dict:
         outcomes = {
             ReservationStatus.RECORDED: "approved and recorded",
             ReservationStatus.REJECTED: "rejected by the administrator",
@@ -207,17 +211,16 @@ def _build_graph(llm: BaseChatModel, checkpointer: BaseCheckpointSaver):
         }
 
     builder = StateGraph(ParkingState, context_schema=ChatContext)
-    builder.add_node("route_input", route_input)
     builder.add_node("user_agent", user_agent_node)
-    builder.add_node("admin_agent", admin_agent_node)
-    builder.add_node("recording", recording)
-    builder.add_node("send_notification", send_notification)
+    builder.add_node("admin", admin)
+    builder.add_node("record", record)
+    builder.add_node("notification", notification)
 
-    builder.add_edge(START, "route_input")
-    builder.add_edge("user_agent", END)
-    builder.add_edge("admin_agent", "recording")
-    builder.add_edge("recording", "send_notification")
-    builder.add_edge("send_notification", END)
+    builder.add_edge(START, "user_agent")
+    builder.add_conditional_edges("user_agent", _after_user_agent, ["admin", END])
+    builder.add_edge("admin", "record")
+    builder.add_edge("record", "notification")
+    builder.add_edge("notification", END)
 
     return builder.compile(checkpointer=checkpointer)
 

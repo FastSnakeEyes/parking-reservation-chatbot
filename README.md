@@ -37,17 +37,16 @@ per chat session (`chat:{session_id}`); the service is a capability the graph ca
 never calls the graph.
 
 ```
-START -> route_input -+-> user_agent -------------------------------------> END
-                      +-> admin_agent -> recording -> send_notification -> END
-                      +-> END   (notice / injection / cancel / nothing to confirm)
+START -> user_agent -+-> admin -> record -> notification -> END   (after `confirm`)
+                     +-> END                                       (any other turn)
 ```
 
 1. A user chats via the web UI (`app/templates/chat.html`) → `POST /chat` → `ParkingGraph.chat()`.
-   The `route_input` node handles the injection guard and the `cancel`/`confirm` commands;
-   anything else goes to the `user_agent` node, which answers from Milvus/Postgres or collects
-   booking details and shows a review, asking the user to `confirm`.
-2. On `confirm`, `route_input` calls `ParkingService.book()`: the reservation is saved with
-   `status="pending"` and its `conversation_id`. The `admin_agent` node then runs the
+   The `user_agent` node first handles the injection guard and the `cancel`/`confirm` commands
+   without the model; anything else goes to the user agent, which answers from Milvus/Postgres
+   or collects booking details and shows a review, asking the user to `confirm`.
+2. On `confirm`, `user_agent` calls `ParkingService.book()`: the reservation is saved with
+   `status="pending"` and its `conversation_id`. The `admin` node then runs the
    **human-in-the-loop admin agent**: it is made to propose an `approve_reservation` call whose
    summary describes the reservation, and LangChain's `HumanInTheLoopMiddleware` pauses on that
    call - and with it the whole conversation (persisted by the checkpointer, so it survives a
@@ -55,11 +54,11 @@ START -> route_input -+-> user_agent -------------------------------------> END
 3. The administrator polls `GET /admin/reservations` (via `ui/admin_app.py`), sees the agent's
    summary, and approves or rejects. `POST /admin/reservations/{id}/decision` looks up the
    reservation's `conversation_id` and resumes that conversation (`ParkingGraph.resume()`).
-4. The `recording` node acts on the decision through `ParkingService.record_decision()`:
+4. The `record` node acts on the decision through `ParkingService.record_decision()`:
    approved, it calls the MCP server's `record_reservation` tool (writes
    `Name | Car Number | Reservation Period | Approval Time` to a file) and sets the
    reservation's status to `recorded`; rejected, it sets it to `rejected`.
-5. The `send_notification` node leaves the outcome for the customer: their next message in that
+5. The `notification` node leaves the outcome for the customer: their next message in that
    session is answered with the approved/rejected notice.
 
 ## Prerequisites
