@@ -65,3 +65,6 @@ approved_reservations.txt
 # Local scratch files, kept on disk but never committed
 /test.py
 /text.txt
+# LibreOffice / office lock files, created while a document is open
+.~lock.*#
+~$*
