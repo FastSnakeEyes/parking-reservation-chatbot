@@ -29,7 +29,9 @@ default; set `LANGSMITH_TRACING=true` plus `LANGSMITH_API_KEY` (and optionally
 `LANGSMITH_PROJECT`) to enable it - wired up in `app/lifespan.py`. For an EU-region
 LangSmith account also set `LANGSMITH_ENDPOINT=https://eu.api.smith.langchain.com` (otherwise
 every upload fails with 403); traces then appear at eu.smith.langchain.com. The startup log
-says whether tracing is enabled.
+says whether tracing is enabled. In LangSmith each chat turn is a `LangGraph` run whose
+trace shows the nodes (`user_agent`, `admin`, `record`, `notification`) and their model/tool
+calls; the **Threads** tab groups a conversation's runs by its `thread_id`.
 
 ### Request flow
 
@@ -43,6 +45,10 @@ never calls the graph.
 START -> user_agent -+-> admin -> record -> notification -> END   (after `confirm`)
                      +-> END                                       (any other turn)
 ```
+
+The diagrams in [`docs/graph.md`](docs/graph.md) - this graph plus the user and admin agents'
+own graphs - are rendered from the compiled code: `uv run python -m scripts.export_graph`
+(add `--png` for `docs/graph.png`, rendered via the public mermaid.ink service).
 
 1. A user chats via the web UI (`app/templates/chat.html`) → `POST /chat` → `ParkingGraph.chat()`.
    The `user_agent` node first handles the injection guard and the `cancel`/`confirm` commands
@@ -312,11 +318,11 @@ app/
 mcp_server/      Stage 3 MCP server (records approved reservations to a file)
 ui/              Stage 2 Streamlit admin console
 migrations/      Alembic migrations
-scripts/         Milvus/Postgres data ingestion
+scripts/         Milvus/Postgres data ingestion, LangGraph diagram export
 evals/           RAG evaluation (golden set, script, latest report)
 load_tests/      Locust load tests per component, seed script, latest report
 tests/           unit / integration / e2e tests
-docs/            the course specification this repo implements
+docs/            the course specification, the presentation, LangGraph diagrams (graph.md)
 ```
 
 ## Linting & Formatting
