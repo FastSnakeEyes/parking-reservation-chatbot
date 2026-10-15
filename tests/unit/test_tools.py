@@ -28,3 +28,21 @@ def test_review_description_falls_back_without_a_summary():
 
     assert _review_description(with_summary, None, None) == "Approve Jane?"
     assert _review_description(without, None, None) == "Please review this reservation request."
+
+
+@pytest.mark.parametrize(
+    ("query", "cleaned"),
+    [
+        ("cancellation policy VilniusPark", "cancellation policy"),
+        ("VilniusPark minimum reservation length", "minimum reservation length"),
+        ("Vilnius Park rules", "rules"),
+        ("vilniuspark", "vilniuspark"),  # nothing else to search for: kept
+        ("parking in Vilnius old town", "parking in Vilnius old town"),  # the city stays
+    ],
+)
+def test_search_queries_drop_the_brand_name(query, cleaned):
+    """With the brand name, queries matched every doc's generic intro chunk
+    instead of the relevant one (found by the Evidently evaluation)."""
+    from app.ai.tools import clean_search_query
+
+    assert clean_search_query(query) == cleaned

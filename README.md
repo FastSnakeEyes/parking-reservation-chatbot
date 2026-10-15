@@ -10,7 +10,7 @@ Engineering: Fast Track" course assignment described in [`docs/SPECIFICATION.md`
 
 | Stage | What it is | Where |
 | --- | --- | --- |
-| 1. RAG chatbot | `langchain.agents.create_agent` user agent over a hybrid store: Milvus for static docs (general info, rules, booking process, per-car-park pages), Postgres for dynamic data (hours, prices, capacity, reservations) | `app/ai/agents.py`, `app/ai/tools.py`, `app/db/` |
+| 1. RAG chatbot | `langchain.agents.create_agent` user agent over a hybrid store: Milvus for static docs (general info, rules, booking process, per-car-park pages) searched with hybrid search - dense vectors + BM25 keywords, weighted 0.7 / 0.3 - and Postgres for dynamic data (hours, prices, capacity, reservations) | `app/ai/agents.py`, `app/ai/tools.py`, `app/db/` |
 | 1. Guardrails | `PIIMiddleware` redacts contact/payment data everywhere and other customers' names/car numbers from tool results; Presidio+spaCy keeps PII out of vector-search queries and the ingested docs; optional transformer-based prompt-injection screening. The operator's own published contacts (`PUBLIC_CONTACTS`) are never redacted | `app/ai/guardrails.py` |
 | 2. Human-in-the-loop admin agent | A second `create_agent` proposes an `request_admin_approval` call; LangChain's `HumanInTheLoopMiddleware` pauses on it until the administrator approves or rejects it through the REST API (web page or Streamlit console) | `app/ai/agents.py`, `app/api/routers/admin.py`, `ui/admin_app.py` |
 | 3. MCP server | Standalone server (streamable-HTTP, bearer-token auth) exposing one tool, `record_reservation`, which appends approved reservations to a file | `mcp_server/server.py` |
@@ -157,6 +157,8 @@ the insert run under a row lock, so two customers can't both take the last space
 
    ```bash
    docker compose --env-file .env.development run --rm --no-deps api python -m scripts.ingest_static
+   # after upgrading from an older version (hybrid search, chunk headings), or after removing/shortening docs:
+   docker compose --env-file .env.development run --rm --no-deps api python -m scripts.ingest_static --recreate
    docker compose --env-file .env.development run --rm --no-deps api python -m scripts.ingest_dynamic
    ```
 
@@ -179,11 +181,37 @@ the insert run under a row lock, so two customers can't both take the last space
 
 - **RAG evaluation** (Precision@K/Recall@K against a hand-labelled golden set, plus
   retrieval and end-to-end `/chat` latency; requires the static docs to already be ingested).
-  Latest results: [`evals/report.md`](evals/report.md) - Precision@4 0.58, Recall@4 0.93.
+  Latest results: [`evals/report.md`](evals/report.md) - at K=3, Recall@3 1.00, MRR 0.92,
+  Precision@1 0.87 (the right doc is ranked first for 13 of 15 questions), Precision@3 0.64.
+  Hybrid search took Recall from 0.93 (dense only) to 1.00; giving every chunk its heading path
+  ("# VilniusPark Old Town / ## Facilities") took Precision@1 from 0.73 to 0.87. The report also
+  compares K=2..5 (`--k-range`) and recommends the smallest K with the best recall: K=2 misses
+  an answer, K=4 and 5 add nothing over 3, so `RETRIEVER_K=3`.
 
   ```bash
-  make eval                                         # retrieval only
-  uv run --group eval python -m evals.rag_eval --api-url http://localhost:8000   # + /chat latency
+  make eval          # retrieval accuracy and latency
+  make eval-chat     # + end-to-end /chat latency (calls the chatbot)
+  ```
+
+- The evaluations run on your machine, not in Docker, so they reach Milvus on `localhost`
+  (the `make` targets set `VECTOR_DB_URI=http://localhost:19530`; override with
+  `make eval EVAL_MILVUS_URI=...`). Running the scripts directly with only `.env.development`
+  fails: its `milvus:19530` hostname exists only inside Docker.
+- **Evidently AI evaluation** (LLM-as-judge on the real chatbot's answers: context quality,
+  faithfulness, completeness, refusals, PII in answers, answer length; needs the stack running
+  and costs a few cents of OpenAI calls). Writes an interactive
+  [`evals/evidently_report.html`](evals/evidently_report.html), every verdict with the judge's
+  reasoning in `evals/evidently_rows.csv`, and a summary appended to `evals/report.md`. Its first
+  run found a real bug: the chatbot added the brand name to search queries, which pulled in every
+  doc's generic intro chunk instead of the relevant one - 6 of 15 answers wrongly said the docs
+  didn't cover the question. Search queries now drop the brand name. Latest run: context quality
+  100%, faithfulness 93%, completeness 93%, no personal data in any answer. Completeness and PII
+  use custom judges: Evidently's built-in Completeness wants an answer to repeat every retrieved
+  chunk (it failed "10 km/h" for not listing EV charger penalties; 7%), and its PII judge flagged
+  "a booking needs your name and car number".
+
+  ```bash
+  make eval-evidently
   ```
 
 - **Load tests** (Locust, against a running stack) for each component: the chatbot
@@ -219,7 +247,7 @@ uv run pytest --cov=app --cov=mcp_server --cov-report=term-missing   # with cove
 | `tests/e2e/` | the whole reservation flow through the real graph, Postgres checkpointer and MCP server |
 
 CI (`.github/workflows/ci.yml`) runs Ruff and the full suite on every push and pull request.
-Latest local run: 145 tests passing, 88% coverage of `app/` and `mcp_server/`.
+Latest local run: 161 tests passing, 88% coverage of `app/` and `mcp_server/`.
 
 ## Checking approved reservations
 

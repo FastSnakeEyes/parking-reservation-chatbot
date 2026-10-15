@@ -1,0 +1,388 @@
+question,context,answer,retrieved_sources,precision_at_3,recall_at_3,retrieval_ms,chat_ms,Context quality,Context quality reasoning,Faithfulness,Faithfulness reasoning,Completeness,Completeness reasoning,Declined,Declined reasoning,PII in answer,PII in answer reasoning,Answer length
+What payment methods are accepted at VilniusPark car parks?,"# VilniusPark – General Information
+## Payment
+Parking can be paid by bank card (Visa, Mastercard), Apple Pay or Google Pay at the payment machines, at the exit barrier, or in advance for reserved stays. Cash is accepted only at the Station and Airport car parks. Prices are set per car park and may differ on weekdays and weekends. The chat assistant always gives current prices on request.
+
+# VilniusPark – General Information
+## Contact
+- Customer support phone: +370 5 200 0000 (daily 08:00–20:00)
+- Email: info@vilpark.lt
+- Emergency line at each car park: intercom at every barrier and payment machine, available 24/7
+
+# VilniusPark Station
+## Facilities
+- Single level, open air, no height limit
+- 5 accessible spaces near the station entrance
+- Short-stay ""Kiss & Ride"" zone, free for the first 10 minutes (not reservable)
+- Payment machines accept cards and cash
+- 24/7 CCTV, lit at night","At VilniusPark car parks, the accepted payment methods are:
+
+- Bank card (Visa and others)
+- Apple Pay
+- Google Pay
+
+These payment options can be used at the payment machines, at the exit barrier, or in advance for reserved stays. Cash is only accepted at the Station and Airport car parks. Prices may vary between weekdays and weekends [1].","general_info.md, general_info.md, parkings/station.md",0.6666666666666666,1.0,1096.8,3381.7,VALID,"The text provides sufficient information about the accepted payment methods at VilniusPark car parks. It mentions that parking can be paid using bank cards (Visa, Mastercard), Apple Pay, Google Pay, or cash at specific locations, addressing the requirements of the question directly.",FAITHFUL,"The text accurately reflects the payment methods accepted at VilniusPark car parks, including bank cards, Apple Pay, and Google Pay. It also correctly states that cash is only accepted at the Station and Airport car parks and mentions the payment options available at the payment machines and barriers. Additionally, it notes that prices may vary on weekdays and weekends, which aligns with the information in the source.",INCOMPLETE,"The answer fails to mention that cash is accepted only at the Station and Airport car parks, which is a relevant condition for the payment methods. This omission makes the answer incomplete, as it does not fully convey the conditions under which cash payments are accepted.",OK,The text provides information about accepted payment methods at VilniusPark car parks without any refusal or rejection. It is informative and does not indicate a decline.,OK,"The text lists accepted payment methods and details about their use at the car parks, but does not contain any specific personal data such as names, license plate numbers, phone numbers, or addresses. Therefore, it is classified as OK.",341
+Can I park a motorcycle at a VilniusPark car park?,"# VilniusPark – General Information
+## Frequently asked questions
+**Do I need a reservation?**
+No. Reservations guarantee a space, but every car park also has non-reserved spaces for drive-in customers, first come, first served.  
+**How is the parking fee calculated?**
+The fee is charged per started hour up to a daily maximum. Current rates for each car park are available from the chat assistant.  
+**Can I park a motorcycle?**
+Yes. Motorcycles pay the same rate as cars and use marked motorcycle bays where available.  
+**Are there electric vehicle chargers?**
+Yes, at the Old Town, Business Center and Airport car parks. Charging is paid separately at the charger.  
+**Is there parking for people with disabilities?**
+All car parks have marked accessible spaces near the exits or elevators. Holders of a valid disability parking card park free of charge for up to 2 hours at the Old Town and Užupis car parks.  
+**Where can I find opening hours?**
+
+# VilniusPark – General Information
+## Frequently asked questions
+**Where can I find opening hours?**
+Opening hours differ between car parks and can change on public holidays. Ask the chat assistant for the current opening hours.
+
+# VilniusPark – General Information
+VilniusPark (UAB ""VilniusPark"") is a parking operator in Vilnius, Lithuania. It runs five car parks across the city: in the Old Town, at the railway and bus station, in the Konstitucijos avenue business district, at Vilnius International Airport, and in Užupis. Drivers can reserve a space in advance through the VilniusPark chat assistant. They can also drive in without a reservation while non-reserved spaces are free.","Yes, you can park a motorcycle at a VilniusPark car park. Motorcycles pay the same rate as cars and should use marked motorcycle bays where available [1].","general_info.md, general_info.md, general_info.md",1.0,1.0,683.2,3005.0,VALID,The text specifies that motorcycles can be parked and that they pay the same rate as cars while using marked motorcycle bays where available. This directly answers the question about parking a motorcycle at a VilniusPark car park.,FAITHFUL,"The response accurately reflects information from the source about parking motorcycles at VilniusPark car parks, stating that motorcycles pay the same rate as cars and should use marked motorcycle bays where available, which is consistent with the details provided in the source.",COMPLETE,"The answer addresses the question directly by stating that motorcycles can be parked at VilniusPark car parks. It also provides relevant information about the parking fee being the same as for cars and that motorcycles should use marked motorcycle bays where available, which are all the pertinent facts from the source regarding parking motorcycles at VilniusPark. No relevant facts from the source have been omitted.",OK,"The text provides information about parking a motorcycle at a VilniusPark car park, stating that it is allowed and explaining the rates and usage of motorcycle bays. It does not indicate a refusal or rejection.",OK,"The text provides information about parking motorcycles at a specific car park but does not contain any specific personal data, such as a name, car registration number, phone number, email address, home address, ID, or payment card number.",154
+Do disability parking card holders get free parking?,"# VilniusPark Užupis
+## Good to know
+- Only 40 spaces in total, so it fills up quickly on weekends. Reservation is recommended.
+- Closed on Sundays.
+- Holders of a disability parking card park free for up to 2 hours.
+- No EV chargers.
+
+# VilniusPark Old Town (Underground)
+## Good to know
+- Popular on Friday and Saturday evenings and during events in the centre. Reserve ahead on weekends.
+- Holders of a disability parking card park free for up to 2 hours.
+
+# VilniusPark – General Information
+## Frequently asked questions
+**Do I need a reservation?**
+No. Reservations guarantee a space, but every car park also has non-reserved spaces for drive-in customers, first come, first served.  
+**How is the parking fee calculated?**
+The fee is charged per started hour up to a daily maximum. Current rates for each car park are available from the chat assistant.  
+**Can I park a motorcycle?**
+Yes. Motorcycles pay the same rate as cars and use marked motorcycle bays where available.  
+**Are there electric vehicle chargers?**
+Yes, at the Old Town, Business Center and Airport car parks. Charging is paid separately at the charger.  
+**Is there parking for people with disabilities?**
+All car parks have marked accessible spaces near the exits or elevators. Holders of a valid disability parking card park free of charge for up to 2 hours at the Old Town and Užupis car parks.  
+**Where can I find opening hours?**",Holders of a disability parking card can park free of charge for up to 2 hours at the Old Town and Užupis car parks [1][2].,"parkings/uzupis.md, parkings/old_town.md, general_info.md",0.3333333333333333,1.0,486.7,2867.0,VALID,The text clearly states that holders of a disability parking card park free for up to 2 hours at the specified car parks. This directly answers the question about whether disability parking card holders get free parking.,FAITHFUL,"The text accurately states that holders of a disability parking card can park free of charge for up to 2 hours at both the Old Town and Užupis car parks, which is consistent with the information provided in the SOURCE.",COMPLETE,"The answer provides the necessary information regarding the free parking for holders of a disability parking card, specifying that they can park free for up to 2 hours at both the Old Town and Užupis car parks. It does not leave out any relevant facts asked by the question.",OK,"The text provides information about parking regulations for holders of a disability parking card, indicating they can park free for a specified duration. There is no refusal or rejection stated in the text.",OK,"The text does not contain any specific personal data values such as real names, car registration numbers, personal phone numbers, email addresses, home addresses, ID or payment card numbers. It discusses general information about disability parking cards and does not identify any individual.",123
+What are the steps to reserve a parking space?,"# How to Reserve a Parking Space
+## Reservation steps
+1. **Choose a car park**: tell the assistant which VilniusPark car park you want, or describe where you are going and it will suggest one.
+2. **Choose date and time**: give the arrival date and time and the departure date and time. Reservations are made in 30-minute steps.
+3. **Check availability and price**: the assistant checks whether reservable spaces are free for the whole period and tells you the expected price.
+4. **Give your details**: name, surname, car registration plate number, and a phone number or email for the confirmation.
+5. **Administrator review**: your request is sent to a VilniusPark administrator, who approves or rejects it, usually within 15 minutes during support hours.
+6. **Confirmation**: once approved, you receive a confirmation with a reservation number. The barrier recognises your plate number automatically on arrival.
+
+# How to Reserve a Parking Space
+## Why a reservation can be rejected
+- No reservable spaces left for the requested period.
+- The car park is closed during part of the requested period.
+- The vehicle exceeds the car park's height limit.
+- Missing or invalid details (e.g. an incomplete plate number).
+
+# How to Reserve a Parking Space
+## Arrival and departure
+- You can enter up to 30 minutes before the reserved start time at no extra charge.
+- The space is held for 60 minutes after the reserved start time. After that, the reservation may be released.
+- If you stay longer than reserved, the extra time is charged at the standard hourly rate at exit.
+- You cannot enter or leave a car park while it is closed, even with a reservation. Check the opening hours for your dates.","Here are the steps to reserve a parking space:
+
+1. **Choose a car park**: Indicate which VilniusPark car park you want, or describe your destination for suggestions.
+2. **Choose date and time**: Provide the arrival and departure dates and times. Reservations are made in 30-minute increments.
+3. **Check availability and price**: The assistant will check if there are reservable spaces available for the entire period and inform you of the expected price.
+4. **Give your details**: You need to provide your name, surname, car registration plate number, and a phone number or email for confirmation.
+5. **Administrator review**: Your request is sent to a VilniusPark administrator for approval or rejection, usually within 15 minutes during support hours.
+6. **Confirmation**: Once approved, you will receive a confirmation with a reservation number. The barrier will automatically recognize your plate number upon arrival.
+
+For more details, you can refer to the source [1].","booking_process.md, booking_process.md, booking_process.md",1.0,1.0,607.6,3733.5,VALID,"The text outlines clear and detailed steps to reserve a parking space, including choosing a car park, selecting date and time, checking availability and price, providing personal details, undergoing administrator review, and receiving confirmation. This provides sufficient information to effectively answer the question regarding the steps to reserve a parking space.",FAITHFUL,"The provided text accurately reflects the steps to reserve a parking space as outlined in the SOURCE. It includes all necessary details without contradictions or additions, ensuring it adheres closely to the information presented in the SOURCE.",COMPLETE,"The provided answer includes all the steps required to reserve a parking space as outlined in the source. It covers every step from choosing a car park to receiving confirmation, and uses similar language to that in the source. There are no missing facts or conditions that would make the answer incomplete.",OK,"The text provides clear, informative steps on how to reserve a parking space, indicating a process rather than a refusal or rejection.",OK,"The text mentions types of personal data that need to be provided (name, surname, car registration plate number, phone number, and email) but does not include any actual values or specific personal data. Therefore, it does not contain PII.",974
+What is the minimum and maximum length of a reservation?,"# How to Reserve a Parking Space
+## Reservation limits
+- Minimum reservation length: 1 hour.
+- Maximum reservation length: 14 days (Airport Long-Stay: 30 days).
+- Reservations can be made up to 30 days in advance.
+- One reservation covers one vehicle. Several vehicles need separate reservations.
+
+# VilniusPark Airport Long-Stay
+## Good to know
+- Reservations up to 30 days long are possible here.
+- The daily maximum applies to every started 24 hours, which makes long stays cheaper than hourly parking at the terminal.
+- Reserve early around school holidays and Christmas.
+
+# How to Reserve a Parking Space
+## Arrival and departure
+- You can enter up to 30 minutes before the reserved start time at no extra charge.
+- The space is held for 60 minutes after the reserved start time. After that, the reservation may be released.
+- If you stay longer than reserved, the extra time is charged at the standard hourly rate at exit.
+- You cannot enter or leave a car park while it is closed, even with a reservation. Check the opening hours for your dates.","The minimum reservation length is 1 hour, and the maximum reservation length is 14 days. However, for the Airport Long-Stay parking, reservations can be made for up to 30 days. Reservations can be made up to 30 days in advance [1].","booking_process.md, parkings/airport.md, booking_process.md",0.6666666666666666,1.0,565.9,3043.6,VALID,"The text provides clear information about the minimum reservation length being 1 hour and the maximum reservation length being 14 days, with a specific mention of 30 days for Airport Long-Stay. This sufficiently answers the question regarding the length of reservations.",FAITHFUL,"The text accurately reflects the information provided in the source regarding the minimum and maximum reservation lengths, and the specifics for Airport Long-Stay parking. It also correctly states that reservations can be made up to 30 days in advance, which is consistent with the source.",COMPLETE,"The answer correctly provides the minimum reservation length of 1 hour and the maximum reservation length of 14 days, along with the exception for Airport Long-Stay parking of up to 30 days. All relevant facts requested in the question are covered.",OK,The text provides information about reservation lengths and policies without implying a refusal or rejection of assistance. It presents details in a factual manner.,OK,"The text does not contain any actual values of specific personal data such as names, car registration numbers, phone numbers, email addresses, home addresses, or IDs. It only provides general information about reservation lengths and policies, which does not qualify as PII.",231
+Can I cancel my parking reservation for free?,"# How to Reserve a Parking Space
+## Changes and cancellations
+- Free cancellation up to 2 hours before the reserved start time.
+- Later cancellations and no-shows are charged for the first hour of the reservation.
+- To change the time or the plate number, ask the assistant. A change is a new request and goes through administrator review again.
+
+# How to Reserve a Parking Space
+## Arrival and departure
+- You can enter up to 30 minutes before the reserved start time at no extra charge.
+- The space is held for 60 minutes after the reserved start time. After that, the reservation may be released.
+- If you stay longer than reserved, the extra time is charged at the standard hourly rate at exit.
+- You cannot enter or leave a car park while it is closed, even with a reservation. Check the opening hours for your dates.
+
+# VilniusPark – General Information
+## Frequently asked questions
+**Do I need a reservation?**
+No. Reservations guarantee a space, but every car park also has non-reserved spaces for drive-in customers, first come, first served.  
+**How is the parking fee calculated?**
+The fee is charged per started hour up to a daily maximum. Current rates for each car park are available from the chat assistant.  
+**Can I park a motorcycle?**
+Yes. Motorcycles pay the same rate as cars and use marked motorcycle bays where available.  
+**Are there electric vehicle chargers?**
+Yes, at the Old Town, Business Center and Airport car parks. Charging is paid separately at the charger.  
+**Is there parking for people with disabilities?**
+All car parks have marked accessible spaces near the exits or elevators. Holders of a valid disability parking card park free of charge for up to 2 hours at the Old Town and Užupis car parks.  
+**Where can I find opening hours?**","You can cancel your parking reservation for free up to 2 hours before the reserved start time. If you cancel later or do not show up, you will be charged for the first hour of the reservation [1].","booking_process.md, booking_process.md, general_info.md",0.6666666666666666,1.0,629.8,4127.8,VALID,"The text clearly states that free cancellation is allowed up to 2 hours before the reserved start time, which directly answers the question about cancelling a parking reservation for free.",FAITHFUL,"The text accurately reflects the information provided in the source about cancellation policies, stating that cancellations are free up to 2 hours before the reserved start time and that later cancellations or no-shows will incur a charge for the first hour of the reservation.",COMPLETE,The answer addresses the question directly by stating that cancellation is free up to 2 hours before the reserved start time and that charges apply for later cancellations or no-shows. It covers all relevant facts from the source regarding cancellation conditions.,OK,"The text provides information about the cancellation policy for a parking reservation, detailing the terms without refusing or rejecting a request.",OK,"The text does not contain any specific personal data or values such as names, car registration numbers, phone numbers, email addresses, home addresses, ID numbers, or payment card numbers. It discusses the cancellation policy without disclosing any identifiable information.",196
+Why might a parking reservation be rejected?,"# How to Reserve a Parking Space
+## Why a reservation can be rejected
+- No reservable spaces left for the requested period.
+- The car park is closed during part of the requested period.
+- The vehicle exceeds the car park's height limit.
+- Missing or invalid details (e.g. an incomplete plate number).
+
+# How to Reserve a Parking Space
+## Reservation steps
+1. **Choose a car park**: tell the assistant which VilniusPark car park you want, or describe where you are going and it will suggest one.
+2. **Choose date and time**: give the arrival date and time and the departure date and time. Reservations are made in 30-minute steps.
+3. **Check availability and price**: the assistant checks whether reservable spaces are free for the whole period and tells you the expected price.
+4. **Give your details**: name, surname, car registration plate number, and a phone number or email for the confirmation.
+5. **Administrator review**: your request is sent to a VilniusPark administrator, who approves or rejects it, usually within 15 minutes during support hours.
+6. **Confirmation**: once approved, you receive a confirmation with a reservation number. The barrier recognises your plate number automatically on arrival.
+
+# How to Reserve a Parking Space
+## Reservation limits
+- Minimum reservation length: 1 hour.
+- Maximum reservation length: 14 days (Airport Long-Stay: 30 days).
+- Reservations can be made up to 30 days in advance.
+- One reservation covers one vehicle. Several vehicles need separate reservations.","A parking reservation might be rejected for several reasons:
+
+- No reservable spaces left for the requested period.
+- The car park is closed during part of the requested period.
+- The vehicle exceeds the car park's height limit.
+- Missing or invalid details (e.g., an incomplete plate number) [1].","booking_process.md, booking_process.md, booking_process.md",1.0,1.0,573.7,3122.2,VALID,"The text explicitly lists several reasons why a parking reservation might be rejected, including: no reservable spaces left, closure of the car park, vehicle height exceeding the limit, and missing or invalid details. This provides sufficient information to answer the question effectively.",FAITHFUL,"The text accurately lists the reasons why a parking reservation might be rejected, which are directly taken from the SOURCE without any contradictions or additions of new information.",COMPLETE,"The answer provides all the relevant reasons for why a parking reservation might be rejected as outlined in the source. It lists all the specified conditions: no reservable spaces left, the car park being closed, the vehicle exceeding height limits, and missing or invalid details. Therefore, it fulfills the completeness criteria for the question asked.",OK,"The text outlines reasons for a parking reservation being rejected, but does not convey a refusal or polite rejection in a direct manner. It is informative rather than rejecting an offer or request.",OK,"The text discusses reasons for a potential parking reservation rejection without providing any specific personal data like real names, car registration numbers, or contact information. It only mentions the types of information that could be missing or invalid, which does not constitute PII.",297
+What is the maximum driving speed inside the car parks?,"# Parking Rules
+- Maximum speed inside all car parks is 10 km/h.
+- Park only within marked bays and do not block driveways, ramps or emergency exits.
+- Vehicles running on LPG are not allowed in the underground Old Town car park.
+- Respect the height limit shown at each entrance. Height limits are listed in each car park's description.
+- Reserved spaces are marked with a blue ""R"" sign and are only for vehicles with an approved reservation.
+- EV charging bays are for electric vehicles that are actively charging. Vehicles blocking chargers can be charged a penalty of 20 EUR.
+- Car washing, repairs, camping and sleeping in vehicles are not allowed.
+- Lost or damaged entry ticket (drive-in customers): the daily maximum rate for each started day is charged.
+- VilniusPark is not responsible for items left in vehicles. All car parks have 24/7 CCTV.
+- Vehicles left for more than 30 days without a valid reservation may be towed at the owner's cost.
+
+# VilniusPark – General Information
+## Frequently asked questions
+**Do I need a reservation?**
+No. Reservations guarantee a space, but every car park also has non-reserved spaces for drive-in customers, first come, first served.  
+**How is the parking fee calculated?**
+The fee is charged per started hour up to a daily maximum. Current rates for each car park are available from the chat assistant.  
+**Can I park a motorcycle?**
+Yes. Motorcycles pay the same rate as cars and use marked motorcycle bays where available.  
+**Are there electric vehicle chargers?**
+Yes, at the Old Town, Business Center and Airport car parks. Charging is paid separately at the charger.  
+**Is there parking for people with disabilities?**
+All car parks have marked accessible spaces near the exits or elevators. Holders of a valid disability parking card park free of charge for up to 2 hours at the Old Town and Užupis car parks.  
+**Where can I find opening hours?**
+
+# How to Reserve a Parking Space
+## Reservation limits
+- Minimum reservation length: 1 hour.
+- Maximum reservation length: 14 days (Airport Long-Stay: 30 days).
+- Reservations can be made up to 30 days in advance.
+- One reservation covers one vehicle. Several vehicles need separate reservations.",The maximum driving speed inside all car parks is 10 km/h [1].,"rules.md, general_info.md, booking_process.md",0.3333333333333333,1.0,576.7,2460.2,VALID,"The text explicitly states that the maximum speed inside all car parks is 10 km/h, which directly answers the question regarding the maximum driving speed.",FAITHFUL,"The statement accurately reflects the information from the source, which clearly states that the maximum speed inside all car parks is 10 km/h.",COMPLETE,"The text accurately states the maximum driving speed inside all car parks as 10 km/h, which is the fact requested in the question. No other relevant facts or conditions were omitted.",OK,"The text provides information about the maximum driving speed in car parks, which is a factual statement and does not involve a rejection or refusal. Therefore, it is categorized as OK.",OK,"The text provides general information about the driving speed limit inside car parks and does not contain any personal data or specifics about an individual such as names, registration numbers, or contact details.",62
+What happens if I lose my entry ticket?,"# Parking Rules
+- Maximum speed inside all car parks is 10 km/h.
+- Park only within marked bays and do not block driveways, ramps or emergency exits.
+- Vehicles running on LPG are not allowed in the underground Old Town car park.
+- Respect the height limit shown at each entrance. Height limits are listed in each car park's description.
+- Reserved spaces are marked with a blue ""R"" sign and are only for vehicles with an approved reservation.
+- EV charging bays are for electric vehicles that are actively charging. Vehicles blocking chargers can be charged a penalty of 20 EUR.
+- Car washing, repairs, camping and sleeping in vehicles are not allowed.
+- Lost or damaged entry ticket (drive-in customers): the daily maximum rate for each started day is charged.
+- VilniusPark is not responsible for items left in vehicles. All car parks have 24/7 CCTV.
+- Vehicles left for more than 30 days without a valid reservation may be towed at the owner's cost.
+
+# VilniusPark – General Information
+## Frequently asked questions
+**Where can I find opening hours?**
+Opening hours differ between car parks and can change on public holidays. Ask the chat assistant for the current opening hours.
+
+# How to Reserve a Parking Space
+## Arrival and departure
+- You can enter up to 30 minutes before the reserved start time at no extra charge.
+- The space is held for 60 minutes after the reserved start time. After that, the reservation may be released.
+- If you stay longer than reserved, the extra time is charged at the standard hourly rate at exit.
+- You cannot enter or leave a car park while it is closed, even with a reservation. Check the opening hours for your dates.","If you lose your entry ticket, you will be charged the daily maximum rate for each started day of your parking. This applies to drive-in customers who have lost or damaged their tickets [1].","rules.md, general_info.md, booking_process.md",0.3333333333333333,1.0,614.4,2650.5,VALID,"The text provides specific information on what happens if an entry ticket is lost or damaged, stating that the daily maximum rate for each started day will be charged. This directly addresses the question about losing an entry ticket.",FAITHFUL,"The text accurately reflects the information from the source regarding the charge applied for a lost or damaged entry ticket for drive-in customers, stating that the daily maximum rate for each started day is charged, which is consistent with the source.",COMPLETE,"The answer provides all relevant information from the source regarding what happens if an entry ticket is lost. It specifies that the daily maximum rate is charged for each started day for drive-in customers who have lost or damaged their tickets, which is the only condition mentioned in the source related to this situation.",OK,"The text provides information about charges related to lost or damaged entry tickets, which does not involve any refusal or rejection. It is a statement about policy rather than a decline.",OK,The text does not contain any specific personal data about an individual; it discusses the parking policy in general terms without providing any identifiable information.,190
+Are LPG vehicles allowed in the Old Town car park?,"# Parking Rules
+- Maximum speed inside all car parks is 10 km/h.
+- Park only within marked bays and do not block driveways, ramps or emergency exits.
+- Vehicles running on LPG are not allowed in the underground Old Town car park.
+- Respect the height limit shown at each entrance. Height limits are listed in each car park's description.
+- Reserved spaces are marked with a blue ""R"" sign and are only for vehicles with an approved reservation.
+- EV charging bays are for electric vehicles that are actively charging. Vehicles blocking chargers can be charged a penalty of 20 EUR.
+- Car washing, repairs, camping and sleeping in vehicles are not allowed.
+- Lost or damaged entry ticket (drive-in customers): the daily maximum rate for each started day is charged.
+- VilniusPark is not responsible for items left in vehicles. All car parks have 24/7 CCTV.
+- Vehicles left for more than 30 days without a valid reservation may be towed at the owner's cost.
+
+# VilniusPark Old Town (Underground)
+## Facilities
+- 3 underground levels (-1 to -3)
+- Height limit: 2.10 m
+- 6 EV charging bays (22 kW, Type 2) on level -1
+- 8 accessible spaces next to the elevators
+- 2 elevators and stairs to street level
+- 24/7 CCTV and staff on site during opening hours
+- LPG vehicles are not allowed
+
+# VilniusPark – General Information
+## Frequently asked questions
+**Do I need a reservation?**
+No. Reservations guarantee a space, but every car park also has non-reserved spaces for drive-in customers, first come, first served.  
+**How is the parking fee calculated?**
+The fee is charged per started hour up to a daily maximum. Current rates for each car park are available from the chat assistant.  
+**Can I park a motorcycle?**
+Yes. Motorcycles pay the same rate as cars and use marked motorcycle bays where available.  
+**Are there electric vehicle chargers?**
+Yes, at the Old Town, Business Center and Airport car parks. Charging is paid separately at the charger.  
+**Is there parking for people with disabilities?**
+All car parks have marked accessible spaces near the exits or elevators. Holders of a valid disability parking card park free of charge for up to 2 hours at the Old Town and Užupis car parks.  
+**Where can I find opening hours?**",LPG vehicles are not allowed in the underground Old Town car park [1].,"rules.md, parkings/old_town.md, general_info.md",0.6666666666666666,1.0,649.8,2341.0,VALID,The text clearly states that 'Vehicles running on LPG are not allowed in the underground Old Town car park.' This directly answers the question regarding the allowance of LPG vehicles in that specific car park.,FAITHFUL,The text accurately reflects the information stated in the SOURCE that LPG vehicles are not allowed in the underground Old Town car park.,COMPLETE,"The answer correctly states that LPG vehicles are not allowed in the underground Old Town car park, which fully addresses the question without omitting any relevant facts.",UNKNOWN,The text states a rule about LPG vehicles not being allowed in a specific location but does not express a refusal or rejection of a request. It solely provides information about the restrictions in place.,OK,"The text provides general information about vehicle restrictions in a specific car park but does not contain any personal data, such as a name, license plate number, phone number, email address, or home address.",70
+What is the height limit at the Old Town car park?,"# Parking Rules
+- Maximum speed inside all car parks is 10 km/h.
+- Park only within marked bays and do not block driveways, ramps or emergency exits.
+- Vehicles running on LPG are not allowed in the underground Old Town car park.
+- Respect the height limit shown at each entrance. Height limits are listed in each car park's description.
+- Reserved spaces are marked with a blue ""R"" sign and are only for vehicles with an approved reservation.
+- EV charging bays are for electric vehicles that are actively charging. Vehicles blocking chargers can be charged a penalty of 20 EUR.
+- Car washing, repairs, camping and sleeping in vehicles are not allowed.
+- Lost or damaged entry ticket (drive-in customers): the daily maximum rate for each started day is charged.
+- VilniusPark is not responsible for items left in vehicles. All car parks have 24/7 CCTV.
+- Vehicles left for more than 30 days without a valid reservation may be towed at the owner's cost.
+
+# VilniusPark Old Town (Underground)
+## Facilities
+- 3 underground levels (-1 to -3)
+- Height limit: 2.10 m
+- 6 EV charging bays (22 kW, Type 2) on level -1
+- 8 accessible spaces next to the elevators
+- 2 elevators and stairs to street level
+- 24/7 CCTV and staff on site during opening hours
+- LPG vehicles are not allowed
+
+# VilniusPark Old Town (Underground)
+## Overview
+Underground car park at the edge of Vilnius Old Town, a few minutes' walk from Cathedral Square, the Gediminas Tower hill and the start of Gedimino avenue. It is the best choice for visiting the Old Town, museums and restaurants in the centre.",The height limit at the Old Town car park is 2.10 meters [2].,"rules.md, parkings/old_town.md, parkings/old_town.md",0.6666666666666666,1.0,534.1,2942.0,VALID,"The text specifies the height limit at the VilniusPark Old Town car park as 2.10 m, directly answering the question about the height limit at the Old Town car park.",FAITHFUL,The statement accurately reflects the information provided in the source that the height limit at the VilniusPark Old Town car park is indeed 2.10 meters.,COMPLETE,"The answer provides the specific height limit of 2.10 meters at the Old Town car park, which is the only fact relevant to the question. It fulfills the requirement without omitting any necessary information.",OK,"The text provides information about a height limit at a car park, which is a factual statement and does not involve a refusal or rejection.",OK,"The text provides information about the height limit at a car park but does not contain any personal data such as names, vehicle registration numbers, phone numbers, or addresses. Therefore, it is classified as OK.",61
+How many EV charging bays does the Old Town car park have?,"# VilniusPark Old Town (Underground)
+## Facilities
+- 3 underground levels (-1 to -3)
+- Height limit: 2.10 m
+- 6 EV charging bays (22 kW, Type 2) on level -1
+- 8 accessible spaces next to the elevators
+- 2 elevators and stairs to street level
+- 24/7 CCTV and staff on site during opening hours
+- LPG vehicles are not allowed
+
+# Parking Rules
+- Maximum speed inside all car parks is 10 km/h.
+- Park only within marked bays and do not block driveways, ramps or emergency exits.
+- Vehicles running on LPG are not allowed in the underground Old Town car park.
+- Respect the height limit shown at each entrance. Height limits are listed in each car park's description.
+- Reserved spaces are marked with a blue ""R"" sign and are only for vehicles with an approved reservation.
+- EV charging bays are for electric vehicles that are actively charging. Vehicles blocking chargers can be charged a penalty of 20 EUR.
+- Car washing, repairs, camping and sleeping in vehicles are not allowed.
+- Lost or damaged entry ticket (drive-in customers): the daily maximum rate for each started day is charged.
+- VilniusPark is not responsible for items left in vehicles. All car parks have 24/7 CCTV.
+- Vehicles left for more than 30 days without a valid reservation may be towed at the owner's cost.
+
+# VilniusPark Business Center
+## Facilities
+- 5 levels (ground + 4)
+- Height limit: 2.20 m
+- 12 EV charging bays (11 kW AC) and 2 fast chargers (50 kW DC) on the ground level
+- 10 accessible spaces next to the elevators
+- Bicycle parking at the ground level
+- 24/7 CCTV",The VilniusPark Old Town car park has a total of 6 EV charging bays.,"parkings/old_town.md, rules.md, parkings/business_center.md",0.3333333333333333,1.0,543.3,3087.3,VALID,"The text specifies that the Old Town car park has 6 EV charging bays on level -1, providing the exact information needed to answer the question.",FAITHFUL,"The statement accurately reflects the information provided in the SOURCE, which mentions that there are 6 EV charging bays on level -1 of the VilniusPark Old Town car park.",COMPLETE,"The answer provides the exact number of EV charging bays (6) in the Old Town car park as requested by the question. All relevant information from the source pertaining to this specific question is included, with no omissions or errors.",OK,The text provides factual information about the number of EV charging bays in a specific car park and does not contain any refusal or rejection.,OK,"The text does not contain any personal data of a specific individual, such as names, registration numbers, phone numbers, email addresses, or home addresses. It only provides information about the car park.",68
+What facilities does the Business Center car park have?,"# VilniusPark Business Center
+## Facilities
+- 5 levels (ground + 4)
+- Height limit: 2.20 m
+- 12 EV charging bays (11 kW AC) and 2 fast chargers (50 kW DC) on the ground level
+- 10 accessible spaces next to the elevators
+- Bicycle parking at the ground level
+- 24/7 CCTV
+
+# VilniusPark Business Center
+## Overview
+Multi-storey car park in the Šnipiškės business district, on the right bank of the Neris river near Konstitucijos avenue. It serves the surrounding office towers, the shopping centres on Konstitucijos avenue and the Municipality building.
+
+# VilniusPark – General Information
+## Our car parks
+- **VilniusPark Old Town**: underground car park near Cathedral Square and Gedimino avenue.
+- **VilniusPark Station**: open-air car park next to the railway and bus stations.
+- **VilniusPark Business Center**: multi-storey car park in the Šnipiškės business district on the right bank of the Neris.
+- **VilniusPark Airport Long-Stay**: open-air long-stay car park a short walk from the airport terminal.
+- **VilniusPark Užupis**: small courtyard car park in the Užupis district.","The Business Center car park has the following facilities:
+
+- 5 levels (ground + 4)
+- Height limit: 2.20 m
+- 12 EV charging bays (11 kW AC) and 2 fast chargers (50 kW DC) on the ground level
+- 10 accessible spaces next to the elevators
+- 24/7 CCTV for security
+
+This car park is located in the Šnipiškės business district and serves the surrounding office towers and shopping centers. It is very busy on weekday mornings (08:00–10:00), so it's advisable to reserve ahead for business meetings. The car park is closed on Sundays and some public holidays, and it offers cheaper rates on weekends [1].","parkings/business_center.md, parkings/business_center.md, general_info.md",0.6666666666666666,1.0,624.1,4001.2,VALID,"The text provides specific details about the facilities available at the Business Center car park, including the number of levels, height limit, EV charging bays, accessible spaces, bicycle parking, and security features like 24/7 CCTV. This information adequately supports answering the question about the facilities present at the Business Center car park.",UNFAITHFUL,"The response accurately mentions the facilities of the Business Center car park as provided in the source. However, it adds new information that is not present in the source, such as the car park being 'very busy on weekday mornings (08:00–10:00)' and the advice to 'reserve ahead for business meetings.' Additionally, it states that the car park is 'closed on Sundays and some public holidays' and offers 'cheaper rates on weekends,' which is also not mentioned in the source. Therefore, the response is unfaithful.",COMPLETE,"The answer lists all the facilities provided by the Business Center car park as requested in the question, including the number of levels, height limit, number of EV charging bays, accessible spaces, and CCTV availability. It does not leave out any relevant facts about the facilities that were asked for in the question.",OK,The text provides information about the Business Center car park facilities and does not contain any refusal or rejection related to offering help or services. It simply describes the features and availability of the car park.,OK,"The text provides general information about the Business Center car park without containing any specific personal data such as real names, car registration numbers, phone numbers, email addresses, home addresses, or identification numbers. It discusses the car park's facilities and operational details, which do not qualify as PII.",598
+Where is the Užupis car park located and how big is it?,"# VilniusPark Užupis
+## Overview
+Small courtyard car park in the artistic Užupis district, just across the Vilnia river from the Old Town. It is quiet and suits visits to Užupis cafés, galleries and the eastern part of the Old Town.
+
+# VilniusPark – General Information
+## Our car parks
+- **VilniusPark Old Town**: underground car park near Cathedral Square and Gedimino avenue.
+- **VilniusPark Station**: open-air car park next to the railway and bus stations.
+- **VilniusPark Business Center**: multi-storey car park in the Šnipiškės business district on the right bank of the Neris.
+- **VilniusPark Airport Long-Stay**: open-air long-stay car park a short walk from the airport terminal.
+- **VilniusPark Užupis**: small courtyard car park in the Užupis district.
+
+# VilniusPark Užupis
+## Location and access
+- District: Užupis
+- Approximate address: Užupio g., Vilnius (entrance through the gate on the courtyard side)
+- Walking distance: Užupis Angel square about 3 minutes, Bernardine Garden about 8 minutes.
+- Narrow entrance. Wide vehicles (vans, large SUVs) should take care.","The Užupis car park is located in the artistic Užupis district, just across the Vilnia river from the Old Town. It is described as a small courtyard car park, making it suitable for visits to Užupis cafés, galleries, and the eastern part of the Old Town. 
+
+The approximate address is Užupio g., and the entrance is through the gate on the courtyard side. It is about a 3-minute walk to Užupis Angel square and an 8-minute walk to the [REDACTED_NAME] Garden. Note that the entrance is narrow, so wide vehicles like vans and large SUVs should take care when accessing it.","parkings/uzupis.md, general_info.md, parkings/uzupis.md",0.6666666666666666,1.0,677.2,3826.5,VALID,"The text provides clear information about the location of the Užupis car park, stating it is in the Užupis district with an approximate address of Užupio g., Vilnius. Additionally, it specifies that it is a small courtyard car park, addressing the size aspect of the question.",FAITHFUL,"The response accurately describes the location, characteristics, and access details of the Užupis car park as provided in the source. It mentions that it is a small courtyard car park in the Užupis district, suitable for visits to cafés and galleries, and includes the approximate address, entrance details, and walking distances to nearby locations, all of which align with the source information.",COMPLETE,"The answer provides the location of the Užupis car park in the Užupis district, along with its description as a small courtyard car park. It includes the approximate address, the narrow entrance condition for wide vehicles, and walking distances to nearby locations, which are all relevant details from the source needed to answer the question fully.",OK,"The text provides information about the Užupis car park, including its location, description, accessibility, and nearby attractions. It does not involve a refusal or rejection of any kind.",OK,"The text provides general information about the Užupis car park location, its entrance, and nearby landmarks. It does not contain any specific personal data such as names, car registration numbers, phone numbers, email addresses, or home addresses. The mention of an approximate address is not sufficient to be classified as PII, and the reference to [REDACTED_NAME] does not provide identifiable information.",569
+Is there a shuttle between the Airport car park and the terminal?,"# VilniusPark Airport Long-Stay
+## Location and access
+- District: Kirtimai
+- Approximate address: Rodūnios kelias, Vilnius (entrance next to the airport access road)
+- Walking distance: airport terminal about 7 minutes. A free shuttle runs every 15 minutes between 04:00 and 24:00.
+- The airport train connects the airport with Vilnius railway station.
+
+# VilniusPark Airport Long-Stay
+## Facilities
+- Single level, fenced, open air, no height limit
+- 8 EV charging bays (22 kW, Type 2)
+- 10 accessible spaces next to the shuttle stop
+- Payment machines accept cards and cash
+- 24/7 security staff, CCTV and barrier access
+
+# VilniusPark – General Information
+## Our car parks
+- **VilniusPark Old Town**: underground car park near Cathedral Square and Gedimino avenue.
+- **VilniusPark Station**: open-air car park next to the railway and bus stations.
+- **VilniusPark Business Center**: multi-storey car park in the Šnipiškės business district on the right bank of the Neris.
+- **VilniusPark Airport Long-Stay**: open-air long-stay car park a short walk from the airport terminal.
+- **VilniusPark Užupis**: small courtyard car park in the Užupis district.","Yes, there is a free shuttle that runs every 15 minutes between the Airport long-stay car park and the terminal. The shuttle operates from 04:00 to 24:00. The walking distance to the airport terminal is about 7 minutes if you prefer to walk.","parkings/airport.md, parkings/airport.md, general_info.md",0.6666666666666666,1.0,657.4,2872.3,VALID,"The text confirms that a free shuttle runs every 15 minutes between the airport car park and the terminal, providing the necessary information to answer the question about the shuttle service.",FAITHFUL,"The text accurately reflects the information from the SOURCE regarding the free shuttle service that runs every 15 minutes between the Airport long-stay car park and the terminal, and the operation hours of the shuttle. It also mentions the walking distance of about 7 minutes to the airport terminal, which matches the SOURCE.",COMPLETE,"The answer provides all relevant facts from the source regarding the shuttle service between the Airport car park and the terminal. It specifies that the shuttle is free, runs every 15 minutes, and operates between 04:00 and 24:00. Additionally, it mentions the alternative walking distance of approximately 7 minutes, which is not required but adds relevant context without leaving out any needed information.",OK,"The text provides helpful information about the availability and schedule of a free shuttle service, as well as walking distances, indicating it is an acceptable response rather than a decline.",OK,"The text does not contain any actual personal data such as names, license plate numbers, phone numbers, email addresses, home addresses, or ID/payment card numbers. It provides information about the shuttle service and distance to the terminal without identifying any individual.",241

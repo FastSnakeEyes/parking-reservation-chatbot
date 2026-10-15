@@ -1,3 +1,4 @@
+import re
 from dataclasses import dataclass, field
 from datetime import date, datetime
 from uuid import uuid4
@@ -12,6 +13,7 @@ from starlette.concurrency import run_in_threadpool
 
 from app.ai.guardrails import get_pii_guard
 from app.config import settings
+from app.constants import BRAND_NAME_PATTERN
 from app.enums import SpaceType
 from app.logger import get_logger
 from app.schemas.chat import BookingInput
@@ -32,6 +34,13 @@ class ChatContext:
     # model (bind_tools) resolves ToolRuntime[ChatContext] down to this field.
     parking_service: ParkingService
     sources: list[dict] = field(default_factory=list)
+
+
+def clean_search_query(query: str) -> str:
+    """Drop the brand name from a search query (see BRAND_NAME_PATTERN) -
+    unless it is all the query has."""
+    cleaned = " ".join(re.sub(BRAND_NAME_PATTERN, " ", query, flags=re.IGNORECASE).split())
+    return cleaned or query.strip()
 
 
 def create_parking_tools() -> list[BaseTool]:
@@ -96,9 +105,14 @@ def create_parking_tools() -> list[BaseTool]:
     async def search_public_rules(query: str, runtime: ToolRuntime[ChatContext]) -> dict:
         """Search static public rules and parking information.
 
-        Use public topic keywords only. Do not include customer
-        names, car numbers, or private booking details.
+        Phrase the query close to the user's own wording, with the car park
+        if one is named (e.g. "steps to reserve a parking space", "height
+        limit Old Town") - a summary like "reservation process" misses the
+        exact section. If the results don't cover the question, search again
+        with other wording. Do not include customer names, car numbers, or
+        private booking details.
         """
+        query = clean_search_query(query)
 
         if await run_in_threadpool(get_pii_guard().contains_pii, query):
             return {"error": ("Query must not contain personal details. Rephrase using public topic keywords only.")}

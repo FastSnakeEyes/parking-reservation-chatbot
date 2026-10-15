@@ -18,6 +18,31 @@ def test_loader_chunks_markdown_with_source_metadata(tmp_path):
     assert "Pay at the machine." in documents[0].page_content
 
 
+def test_loader_moves_front_matter_into_metadata(tmp_path):
+    (tmp_path / "old_town.md").write_text(
+        "---\ndoc_type: parking_details\nparking_id: old-town\n---\n"
+        "# Old Town\n\n## Facilities\n- Height limit: 2.10 m\n"
+    )
+
+    documents = MarkdownLoader(tmp_path).load()
+
+    assert len(documents) == 1  # no chunk of its own for the front matter
+    assert "doc_type" not in documents[0].page_content
+    assert documents[0].metadata["parking_id"] == "old-town"
+
+
+def test_every_chunk_carries_its_heading_path(tmp_path):
+    (tmp_path / "old_town.md").write_text(
+        "# Old Town\n\n## Overview\nNear the Cathedral.\n\n## Facilities\n- Height limit: 2.10 m\n"
+    )
+
+    documents = MarkdownLoader(tmp_path).load()
+
+    facilities = documents[1].page_content
+    assert facilities.startswith("# Old Town\n## Facilities\n")  # the section still says which car park
+    assert "Height limit: 2.10 m" in facilities
+
+
 def test_loader_reads_the_real_static_docs():
     documents = MarkdownLoader(STATIC_DOCS_DIR).load()
 

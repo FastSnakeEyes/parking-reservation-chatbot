@@ -47,6 +47,7 @@ dev = [
     "testcontainers[postgres]>=4.15.0",
 ]
 eval = [
+    "evidently>=0.7.23",
     "locust>=2.46.6",
     "pandas>=3.0.6",
 ]

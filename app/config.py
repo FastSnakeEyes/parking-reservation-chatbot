@@ -61,7 +61,9 @@ class Settings(BaseSettings):
     )
     milvus_token: SecretStr = SecretStr("")
     milvus_collection: str = "parking_static"
-    retriever_k: int = Field(default=4, ge=1)
+    # 3, not 4: with hybrid search the 4th chunk added no recall on the golden set,
+    # only noise and tokens (evals/report.md).
+    retriever_k: int = Field(default=3, ge=1)
 
     cookie_name: str = "parking_chat"
     cookie_ttl: int = Field(default=1800, gt=0)

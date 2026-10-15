@@ -30,6 +30,14 @@ from app.constants.guardrails import (
 )
 from app.constants.llm import LLM_MAX_RETRIES, LLM_TEMPERATURE, LLM_TIMEOUT_SECONDS
 from app.constants.paths import APP_DIR, BASE_DIR, STATIC_DIR, STATIC_DOCS_DIR, TEMPLATES_DIR
+from app.constants.retrieval import (
+    BM25_ANALYZER,
+    BRAND_NAME_PATTERN,
+    DENSE_WEIGHT,
+    HYBRID_CANDIDATES,
+    KEYWORD_WEIGHT,
+    TEXT_MAX_LENGTH,
+)
 
 __all__ = [
     "ADMIN_AUTH_MAX_FAILURES",
@@ -37,13 +45,18 @@ __all__ = [
     "ADMIN_LOCK_WAIT_SECONDS",
     "APP_DIR",
     "BASE_DIR",
+    "BM25_ANALYZER",
+    "BRAND_NAME_PATTERN",
     "CAR_NUMBER_PATTERN",
     "CHAT_LOCK_WAIT_SECONDS",
     "CHAT_REQUEST_TIMEOUT_SECONDS",
     "CHAT_THREAD_PREFIX",
+    "DENSE_WEIGHT",
     "DEV_ONLY_SECRET",
+    "HYBRID_CANDIDATES",
     "INJECTION_LABEL",
     "INJECTION_SCORE_THRESHOLD",
+    "KEYWORD_WEIGHT",
     "LLM_MAX_RETRIES",
     "LLM_TEMPERATURE",
     "LLM_TIMEOUT_SECONDS",
@@ -59,5 +72,6 @@ __all__ = [
     "STATIC_DIR",
     "STATIC_DOCS_DIR",
     "TEMPLATES_DIR",
+    "TEXT_MAX_LENGTH",
     "THREAD_LOCK_TIMEOUT_SECONDS",
 ]
