@@ -9,7 +9,8 @@ descriptors - an LLM (gpt-4o-mini) acting as the judge:
 - Context quality  - is the retrieved context enough to answer the question?
 - Faithfulness     - is the answer grounded in that context (no hallucination)?
 - Completeness     - does the answer cover everything the question asks? (a custom judge)
-- Declined         - did the chatbot refuse to answer?
+- Declined         - did the chatbot refuse? Right for out-of-scope, private-data,
+                     injection and not-in-docs questions (`expected: decline`), wrong otherwise
 - PII in answer    - does the answer contain actual personal data? (a custom judge)
 - Answer length    - characters
 
@@ -38,14 +39,18 @@ from evals.rag_eval import CHAT_REQUEST_SPACING_SECONDS, connect_vector_reposito
 EVALS_DIR = Path(__file__).resolve().parent
 JUDGE_MODEL = "gpt-4o-mini"
 
-# Judge columns: alias -> the category that counts as a pass.
+# Judge columns: alias -> (the category that counts as a pass, which questions
+# it applies to). Grounding checks only make sense where there is something to
+# answer; on a question the chatbot should decline, declining is the pass.
+ANSWER, DECLINE = "answer", "decline"
 JUDGED = {
-    "Context quality": "VALID",
-    "Faithfulness": "FAITHFUL",
-    "Completeness": "COMPLETE",
-    "Declined": "OK",  # DeclineLLMEval: "DECLINE" when the chatbot refused
-    "PII in answer": "OK",  # PIILLMEval: "PII" when it found personal data
+    "Context quality": ("VALID", {ANSWER}),
+    "Faithfulness": ("FAITHFUL", {ANSWER}),
+    "Completeness": ("COMPLETE", {ANSWER}),
+    "PII in answer": ("OK", {ANSWER, DECLINE}),  # the judge says "PII" when it found personal data
 }
+# DeclineLLMEval says "DECLINE" when the chatbot refused - right or wrong depending on `expected`.
+BEHAVIOUR = "Answered or declined correctly"
 
 Ask = Callable[[str], tuple[str, float]]
 
@@ -56,6 +61,8 @@ def collect_rows(retriever, golden_set: list[dict], k: int, ask: Ask) -> list[di
     rows = []
     for case in golden_set:
         relevant = set(case["relevant_sources"])
+        # A question to decline has no right chunk: no retrieval metrics for it.
+        has_sources = bool(relevant)
 
         started = time.perf_counter()
         documents = retriever.search(case["question"], k=k)
@@ -67,11 +74,15 @@ def collect_rows(retriever, golden_set: list[dict], k: int, ask: Ask) -> list[di
         rows.append(
             {
                 "question": case["question"],
+                "category": case.get("category", "single_fact"),
+                "expected": case.get("expected", ANSWER),
                 "context": "\n\n".join(document.page_content for document in documents),
                 "answer": answer,
                 "retrieved_sources": ", ".join(sources),
-                f"precision_at_{k}": sum(source in relevant for source in sources) / len(sources) if sources else 0.0,
-                f"recall_at_{k}": len(relevant & set(sources)) / len(relevant) if relevant else 0.0,
+                f"precision_at_{k}": (
+                    sum(source in relevant for source in sources) / len(sources) if has_sources and sources else None
+                ),
+                f"recall_at_{k}": len(relevant & set(sources)) / len(relevant) if has_sources else None,
                 "retrieval_ms": round(retrieval_ms, 1),
                 "chat_ms": round(chat_ms, 1),
             }
@@ -202,22 +213,47 @@ def descriptors():
     ]
 
 
-def summarize(scored_rows: list[dict]) -> dict[str, float]:
-    """Share of rows passing each judge, from rows that carry the judge columns."""
-    summary = {}
-    for alias, passing in JUDGED.items():
-        values = [row.get(alias) for row in scored_rows if row.get(alias) is not None]
-        summary[alias] = sum(value == passing for value in values) / len(values) if values else float("nan")
-    return summary
+def row_checks(row: dict) -> dict[str, bool]:
+    """Pass/fail of every check that applies to this row and has a verdict."""
+    expected = row.get("expected", ANSWER)
+    checks = {
+        alias: row[alias] == passing
+        for alias, (passing, applies_to) in JUDGED.items()
+        if expected in applies_to and row.get(alias) is not None
+    }
+    if row.get("Declined") is not None:
+        checks[BEHAVIOUR] = row["Declined"] == ("DECLINE" if expected == DECLINE else "OK")
+    return checks
 
 
-def render_summary(summary: dict[str, float], rows: int, k: int) -> str:
+def _share(values: list[bool]) -> float:
+    return sum(values) / len(values) if values else float("nan")
+
+
+def summarize(scored_rows: list[dict]) -> dict:
+    """Pass rate of each check (over the rows it applies to), of each question
+    category (rows passing all their checks), and overall."""
+    checks = [row_checks(row) for row in scored_rows]
+    by_check = {alias: _share([row[alias] for row in checks if alias in row]) for alias in [*JUDGED, BEHAVIOUR]}
+    categories: dict[str, list[bool]] = {}
+    for row, row_result in zip(scored_rows, checks, strict=True):
+        categories.setdefault(row.get("category", "single_fact"), []).append(all(row_result.values()))
+    return {
+        "checks": by_check,
+        "categories": {category: (_share(passed), len(passed)) for category, passed in categories.items()},
+        "overall": _share([all(row.values()) for row in checks]),
+    }
+
+
+def render_summary(summary: dict, rows: int, k: int) -> str:
     lines = [
         "",
         "## Evidently AI: LLM-as-judge answer quality",
         "",
         f"{rows} golden questions, real chatbot answers, judged by `{JUDGE_MODEL}` with Evidently "
         "descriptors - full interactive report: [`evidently_report.html`](evidently_report.html).",
+        "",
+        f"**Overall: {summary['overall']:.0%}** of questions pass every check that applies to them.",
         "",
         "| Check | Passing | Pass means |",
         "| --- | --- | --- |",
@@ -226,11 +262,20 @@ def render_summary(summary: dict[str, float], rows: int, k: int) -> str:
         "Context quality": f"the top-{k} retrieved chunks are enough to answer",
         "Faithfulness": "the answer is grounded in the retrieved context",
         "Completeness": "the answer gives every fact and condition the question asks for",
-        "Declined": "the chatbot answered instead of refusing",
         "PII in answer": "no actual personal data (a name, plate, personal contact) in the answer",
+        BEHAVIOUR: "answers what it can; declines out-of-scope, private-data, injection and not-in-docs questions",
     }
-    for alias, share in summary.items():
+    for alias, share in summary["checks"].items():
         lines.append(f"| {alias} | {share:.0%} | {meaning[alias]} |")
+    lines += [
+        "",
+        "Context quality, faithfulness and completeness are scored on the questions to answer only.",
+        "",
+        "| Question category | Questions | Passing every check |",
+        "| --- | --- | --- |",
+    ]
+    for category, (share, count) in summary["categories"].items():
+        lines.append(f"| {category} | {count} | {share:.0%} |")
     lines += [
         "",
         "How to read it - check the per-row reasoning in `evidently_rows.csv` before trusting a number:",
@@ -274,6 +319,7 @@ def main() -> None:
         pd.DataFrame(rows),
         data_definition=DataDefinition(
             text_columns=["question", "context", "answer"],
+            categorical_columns=["category", "expected"],
             numerical_columns=[f"precision_at_{args.k}", f"recall_at_{args.k}", "retrieval_ms", "chat_ms"],
         ),
         descriptors=descriptors(),

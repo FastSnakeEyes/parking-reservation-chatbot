@@ -6,6 +6,7 @@ from app.enums.chat import ChatStatus
 from app.enums.guardrails import PIIType, PresidioEntity
 from app.enums.parking import DayType, SpaceType
 from app.enums.reservation import ApprovalDecision, ReservationStatus
+from app.enums.retrieval import SearchType
 
 __all__ = [
     "AppEnvironment",
@@ -16,6 +17,7 @@ __all__ = [
     "PIIType",
     "PresidioEntity",
     "ReservationStatus",
+    "SearchType",
     "SpaceType",
     "TokenCounterKind",
 ]

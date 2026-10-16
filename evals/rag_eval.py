@@ -45,6 +45,13 @@ def load_golden_set() -> list[dict]:
     return json.loads(GOLDEN_SET_PATH.read_text(encoding="utf-8"))
 
 
+def answerable(golden_set: list[dict]) -> list[dict]:
+    """The questions with a relevant doc. The others (out of scope, private data,
+    injection, not in the docs) should be declined: they have no right chunk to
+    retrieve, so they are scored by evals/evidently_eval.py only."""
+    return [case for case in golden_set if case["relevant_sources"]]
+
+
 def evaluate_retrieval(repository, golden_set: list[dict], k: int) -> dict:
     per_query = []
 
@@ -69,6 +76,7 @@ def evaluate_retrieval(repository, golden_set: list[dict], k: int) -> dict:
         per_query.append(
             {
                 "question": case["question"],
+                "category": case.get("category", "single_fact"),
                 "relevant_sources": sorted(relevant),
                 "retrieved_sources": retrieved_sources,
                 "precision": precision,
@@ -168,11 +176,19 @@ def measure_chat_latency(api_url: str, golden_set: list[dict], rounds: int = 1) 
     }
 
 
-def render_report(retrieval: dict, chat_latency: dict | None, sweep: list[dict] | None = None) -> str:
+def render_report(
+    retrieval: dict, chat_latency: dict | None, sweep: list[dict] | None = None, golden_size: int | None = None
+) -> str:
+    answerable_count = len(retrieval["per_query"])
+    size = (
+        f"{golden_size} questions; retrieval is scored on the {answerable_count} with a relevant doc"
+        if golden_size and golden_size != answerable_count
+        else f"{answerable_count} questions"
+    )
     lines = [
         "# RAG evaluation report",
         "",
-        f"Golden set size: {len(retrieval['per_query'])} questions, K={retrieval['k']}",
+        f"Golden set: {size}, K={retrieval['k']}",
         "",
         "## Retrieval accuracy",
         "",
@@ -218,14 +234,14 @@ def render_report(retrieval: dict, chat_latency: dict | None, sweep: list[dict] 
         "",
         "## Per-question detail",
         "",
-        "| Question | Precision | Recall | Latency (ms) | Retrieved sources |",
-        "| --- | --- | --- | --- | --- |",
+        "| Question | Category | Precision | Recall | Latency (ms) | Retrieved sources |",
+        "| --- | --- | --- | --- | --- | --- |",
     ]
 
     for row in retrieval["per_query"]:
         sources = ", ".join(row["retrieved_sources"]) or "-"
         lines.append(
-            f"| {row['question']} | {row['precision']:.2f} | {row['recall']:.2f} | "
+            f"| {row['question']} | {row['category']} | {row['precision']:.2f} | {row['recall']:.2f} | "
             f"{row['latency_ms']:.1f} | {sources} |"
         )
 
@@ -248,19 +264,20 @@ def main() -> None:
     args = parser.parse_args()
 
     golden_set = load_golden_set()
+    scored_set = answerable(golden_set)
     repository = connect_vector_repository()
     low, high = args.k_range
 
     try:
         repository.load_collection()
-        retrieval = evaluate_retrieval(repository, golden_set, args.k)
-        sweep = sweep_k(repository, golden_set, list(range(low, high + 1)))
+        retrieval = evaluate_retrieval(repository, scored_set, args.k)
+        sweep = sweep_k(repository, scored_set, list(range(low, high + 1)))
     finally:
         repository.close()
 
-    chat_latency = measure_chat_latency(args.api_url, golden_set) if args.api_url else None
+    chat_latency = measure_chat_latency(args.api_url, scored_set) if args.api_url else None
 
-    report = render_report(retrieval, chat_latency, sweep)
+    report = render_report(retrieval, chat_latency, sweep, golden_size=len(golden_set))
     # Keep the Evidently section (evals/evidently_eval.py) if a previous run appended one.
     existing = args.out.read_text(encoding="utf-8") if args.out.exists() else ""
     marker = "\n## Evidently AI:"

@@ -1,7 +1,7 @@
 """The RAG evaluation's metrics (evals/rag_eval.py), on a fake retriever."""
 
 import pytest
-from evals.rag_eval import evaluate_retrieval, recommend_k, render_report, sweep_k
+from evals.rag_eval import answerable, evaluate_retrieval, recommend_k, render_report, sweep_k
 from langchain_core.documents import Document
 
 
@@ -65,7 +65,16 @@ def test_report_has_the_metrics_and_per_question_rows():
 
     assert "Mean Precision@1: 1.00" in report
     assert "Mean Recall@1: 1.00" in report
-    assert "| Where can I pay? | 1.00 | 1.00 |" in report
+    assert "| Where can I pay? | single_fact | 1.00 | 1.00 |" in report
+
+
+def test_only_questions_with_a_relevant_doc_are_scored_for_retrieval():
+    golden = [
+        {"question": "Where can I pay?", "relevant_sources": ["general_info.md"]},
+        {"question": "Book me a taxi", "expected": "decline", "relevant_sources": []},
+    ]
+
+    assert [case["question"] for case in answerable(golden)] == ["Where can I pay?"]
 
 
 def test_k_sweep_recommends_the_smallest_k_with_the_best_recall():

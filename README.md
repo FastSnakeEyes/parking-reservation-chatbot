@@ -10,7 +10,7 @@ Engineering: Fast Track" course assignment described in [`docs/SPECIFICATION.md`
 
 | Stage | What it is | Where |
 | --- | --- | --- |
-| 1. RAG chatbot | `langchain.agents.create_agent` user agent over a hybrid store: Milvus for static docs (general info, rules, booking process, per-car-park pages) searched with hybrid search - dense vectors + BM25 keywords, weighted 0.7 / 0.3 - and Postgres for dynamic data (hours, prices, capacity, reservations) | `app/ai/agents.py`, `app/ai/tools.py`, `app/db/` |
+| 1. RAG chatbot | `langchain.agents.create_agent` user agent over a hybrid store: Milvus for static docs (general info, rules, booking process, per-car-park pages) searched with hybrid search - semantic vectors + BM25 keywords, weighted 0.7 / 0.3 - and Postgres for dynamic data (hours, prices, capacity, reservations) | `app/ai/agents.py`, `app/ai/tools.py`, `app/db/` |
 | 1. Guardrails | `PIIMiddleware` redacts contact/payment data everywhere and other customers' names/car numbers from tool results; Presidio+spaCy keeps PII out of vector-search queries and the ingested docs; optional transformer-based prompt-injection screening. The operator's own published contacts (`PUBLIC_CONTACTS`) are never redacted | `app/ai/guardrails.py` |
 | 2. Human-in-the-loop admin agent | A second `create_agent` proposes an `request_admin_approval` call; LangChain's `HumanInTheLoopMiddleware` pauses on it until the administrator approves or rejects it through the REST API (web page or Streamlit console) | `app/ai/agents.py`, `app/api/routers/admin.py`, `ui/admin_app.py` |
 | 3. MCP server | Standalone server (streamable-HTTP, bearer-token auth) exposing one tool, `record_reservation`, which appends approved reservations to a file | `mcp_server/server.py` |
@@ -181,16 +181,29 @@ the insert run under a row lock, so two customers can't both take the last space
 
 - **RAG evaluation** (Precision@K/Recall@K against a hand-labelled golden set, plus
   retrieval and end-to-end `/chat` latency; requires the static docs to already be ingested).
-  Latest results: [`evals/report.md`](evals/report.md) - at K=3, Recall@3 1.00, MRR 0.92,
-  Precision@1 0.87 (the right doc is ranked first for 13 of 15 questions), Precision@3 0.64.
-  Hybrid search took Recall from 0.93 (dense only) to 1.00; giving every chunk its heading path
+  The golden set has 30 questions: 15 single-fact ones, plus 15 harder ones (paraphrases,
+  multi-fact, out of scope, private data, prompt injection, not in the docs) that the system was
+  never tuned on. Retrieval is scored on the 23 with a relevant doc. Latest results:
+  [`evals/report.md`](evals/report.md) - at K=3, Recall@3 0.96, MRR 0.91, Precision@1 0.87,
+  Precision@3 0.62 (the 15 single-fact questions alone: Recall@3 1.00, MRR 0.92). Measured on
+  those 15 questions: hybrid search took Recall from 0.93 (semantic only) to 1.00; giving every chunk its heading path
   ("# VilniusPark Old Town / ## Facilities") took Precision@1 from 0.73 to 0.87. The report also
   compares K=2..5 (`--k-range`) and recommends the smallest K with the best recall: K=2 misses
   an answer, K=4 and 5 add nothing over 3, so `RETRIEVER_K=3`.
 
+  `SEARCH_TYPE` picks the search: `hybrid` (default), `semantic` (embeddings only) or `keyword`
+  (BM25 only, no embedding call). On the 15 single-fact questions at K=3:
+
+  | `SEARCH_TYPE` | Recall@3 | MRR | Precision@1 |
+  | --- | --- | --- | --- |
+  | `hybrid` | 1.00 | 0.92 | 0.87 |
+  | `semantic` | 0.93 | 0.86 | 0.80 |
+  | `keyword` | 1.00 | 0.83 | 0.73 |
+
   ```bash
   make eval          # retrieval accuracy and latency
   make eval-chat     # + end-to-end /chat latency (calls the chatbot)
+  SEARCH_TYPE=semantic make eval   # the same with another search type
   ```
 
 - The evaluations run on your machine, not in Docker, so they reach Milvus on `localhost`
@@ -204,8 +217,13 @@ the insert run under a row lock, so two customers can't both take the last space
   reasoning in `evals/evidently_rows.csv`, and a summary appended to `evals/report.md`. Its first
   run found a real bug: the chatbot added the brand name to search queries, which pulled in every
   doc's generic intro chunk instead of the relevant one - 6 of 15 answers wrongly said the docs
-  didn't cover the question. Search queries now drop the brand name. Latest run: context quality
-  100%, faithfulness 93%, completeness 93%, no personal data in any answer. Completeness and PII
+  didn't cover the question. Search queries now drop the brand name. Latest run, on all 30
+  questions: 67% pass every check (single-fact 93%, paraphrases 20%, multi-fact 33%, private
+  data and injection 100%), no personal data in any answer. Reviewing each failure: 2 are real
+  bugs (the Airport's EV bay count answered with Business Center's; Užupis's 2 accessible spaces
+  missed) and 7 are judge errors - the Decline judge doesn't count "the docs don't mention valet
+  parking" as declining, and the judges see only the eval's top-3 chunks, not the ones the
+  chatbot actually searched. Completeness and PII
   use custom judges: Evidently's built-in Completeness wants an answer to repeat every retrieved
   chunk (it failed "10 km/h" for not listing EV charger penalties; 7%), and its PII judge flagged
   "a booking needs your name and car number".
@@ -247,7 +265,7 @@ uv run pytest --cov=app --cov=mcp_server --cov-report=term-missing   # with cove
 | `tests/e2e/` | the whole reservation flow through the real graph, Postgres checkpointer and MCP server |
 
 CI (`.github/workflows/ci.yml`) runs Ruff and the full suite on every push and pull request.
-Latest local run: 161 tests passing, 88% coverage of `app/` and `mcp_server/`.
+Latest local run: 166 tests passing, 88% coverage of `app/` and `mcp_server/`.
 
 ## Checking approved reservations
 

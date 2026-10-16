@@ -6,18 +6,24 @@
 # chunk with the cancellation rules (found by the Evidently evaluation).
 BRAND_NAME_PATTERN = r"\bvilnius\s*park\b"
 
-# Hybrid search (app/db/repositories/milvus.py): dense vector search and BM25
+# Milvus collection fields (app/db/repositories/milvus.py): the chunk text, its
+# embedding, and its BM25 sparse vector, which Milvus computes from the text.
+TEXT_FIELD = "text"
+VECTOR_FIELD = "vector"
+SPARSE_FIELD = "sparse"
+
+# Hybrid search (app/db/repositories/milvus.py): semantic vector search and BM25
 # keyword search each return this many candidates, merged by a weighted ranker.
 # Chosen by measurement on the golden set (evals/report.md): this mix was the
 # only one to find the relevant doc for every question at k=3 and k=4, without
 # losing precision; equal weights or Reciprocal Rank Fusion each missed one.
 HYBRID_CANDIDATES = 10
-DENSE_WEIGHT = 0.7
+SEMANTIC_WEIGHT = 0.7
 KEYWORD_WEIGHT = 0.3
 # BM25 tokenizer: lowercase, English stemming ("tickets" -> "ticket") and
 # English stop words ("if", "the", "is" ...), so a question's filler words don't
 # swamp its keywords - the default ("standard") kept them and made hybrid search
-# worse than dense alone. This is Milvus's built-in {"type": "english"} analyzer
+# worse than semantic alone. This is Milvus's built-in {"type": "english"} analyzer
 # spelled out, because Milvus Lite (used by the tests) only accepts this form.
 BM25_ANALYZER = {
     "tokenizer": "standard",

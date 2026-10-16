@@ -1,11 +1,12 @@
-"""Milvus vector store for the static docs, searched with hybrid search:
-dense vectors (semantic match) plus Milvus's built-in BM25 full-text search
+"""Milvus vector store for the static docs, searched by SEARCH_TYPE - hybrid by default:
+semantic vectors (embeddings) plus Milvus's built-in BM25 full-text search
 (exact keywords such as "LPG" or "height limit"), merged by a weighted ranker
 (see app/constants/retrieval.py for the measured choice). The BM25 field is
 computed by Milvus itself from the chunk text.
+SEARCH_TYPE=semantic or keyword runs one side alone, to compare them (make eval).
 
 A collection created before hybrid search (no BM25 field) still works:
-search falls back to dense-only and logs a warning until it is re-ingested
+search falls back to semantic and logs a warning until it is re-ingested
 with `python -m scripts.ingest_static --recreate`.
 """
 
@@ -15,13 +16,21 @@ from langchain_core.documents import Document
 from langchain_core.embeddings import Embeddings
 from pymilvus import AnnSearchRequest, DataType, Function, FunctionType, MilvusClient, WeightedRanker
 
-from app.constants import BM25_ANALYZER, DENSE_WEIGHT, HYBRID_CANDIDATES, KEYWORD_WEIGHT, TEXT_MAX_LENGTH
+from app.constants import (
+    BM25_ANALYZER,
+    HYBRID_CANDIDATES,
+    KEYWORD_WEIGHT,
+    SEMANTIC_WEIGHT,
+    SPARSE_FIELD,
+    TEXT_FIELD,
+    TEXT_MAX_LENGTH,
+    VECTOR_FIELD,
+)
 from app.db.repositories.base import AbstractVectorRepository
+from app.enums import SearchType
 from app.logger import get_logger
 
 logger = get_logger(__name__)
-
-SPARSE_FIELD = "sparse"
 
 
 class MilvusRepository(AbstractVectorRepository):
@@ -31,11 +40,13 @@ class MilvusRepository(AbstractVectorRepository):
         embeddings: Embeddings,
         collection_name: str,
         embedding_model: str,
+        search_type: SearchType = SearchType.HYBRID,
     ):
         self.client = client
         self.embeddings = embeddings
         self.collection_name = collection_name
         self.embedding_model = embedding_model
+        self.search_type = search_type
 
     def create_collection(self, dimension: int) -> None:
         if dimension < 1:
@@ -47,7 +58,7 @@ class MilvusRepository(AbstractVectorRepository):
             )
 
             field = next(
-                (field for field in description["fields"] if field["name"] == "vector"),
+                (field for field in description["fields"] if field["name"] == VECTOR_FIELD),
                 None,
             )
 
@@ -61,9 +72,13 @@ class MilvusRepository(AbstractVectorRepository):
 
         schema = self.client.create_schema(auto_id=False, enable_dynamic_field=True)
         schema.add_field("id", DataType.VARCHAR, is_primary=True, max_length=64)
-        schema.add_field("vector", DataType.FLOAT_VECTOR, dim=dimension)
+        schema.add_field(VECTOR_FIELD, DataType.FLOAT_VECTOR, dim=dimension)
         schema.add_field(
-            "text", DataType.VARCHAR, max_length=TEXT_MAX_LENGTH, enable_analyzer=True, analyzer_params=BM25_ANALYZER
+            TEXT_FIELD,
+            DataType.VARCHAR,
+            max_length=TEXT_MAX_LENGTH,
+            enable_analyzer=True,
+            analyzer_params=BM25_ANALYZER,
         )
         schema.add_field(SPARSE_FIELD, DataType.SPARSE_FLOAT_VECTOR)
         # Milvus fills the BM25 field from `text` on every insert/upsert.
@@ -71,13 +86,13 @@ class MilvusRepository(AbstractVectorRepository):
             Function(
                 name="text_bm25",
                 function_type=FunctionType.BM25,
-                input_field_names=["text"],
+                input_field_names=[TEXT_FIELD],
                 output_field_names=[SPARSE_FIELD],
             )
         )
 
         index_params = self.client.prepare_index_params()
-        index_params.add_index("vector", index_type="AUTOINDEX", metric_type="COSINE")
+        index_params.add_index(VECTOR_FIELD, index_type="AUTOINDEX", metric_type="COSINE")
         index_params.add_index(SPARSE_FIELD, index_type="SPARSE_INVERTED_INDEX", metric_type="BM25")
 
         self.client.create_collection(
@@ -130,8 +145,8 @@ class MilvusRepository(AbstractVectorRepository):
                 rows.append(
                     {
                         "id": document_id,
-                        "vector": vector,
-                        "text": document.page_content,
+                        VECTOR_FIELD: vector,
+                        TEXT_FIELD: document.page_content,
                         "metadata": document.metadata,
                         "embedding_model": self.embedding_model,
                     }
@@ -156,31 +171,47 @@ class MilvusRepository(AbstractVectorRepository):
         if not self.client.has_collection(self.collection_name):
             raise RuntimeError("Collection does not exist. Run ingestion.")
 
-        vector = self.embeddings.embed_query(query)
-        output_fields = ["text", "metadata", "embedding_model"]
+        output_fields = [TEXT_FIELD, "metadata", "embedding_model"]
+        search_type = self.search_type
 
-        if self._is_hybrid():
+        if search_type != SearchType.SEMANTIC and not self._is_hybrid():
+            logger.warning(
+                "Collection %s has no BM25 field - semantic search instead of %s. Re-ingest with "
+                "`python -m scripts.ingest_static --recreate` to enable it.",
+                self.collection_name,
+                search_type,
+            )
+            search_type = SearchType.SEMANTIC
+
+        if search_type == SearchType.KEYWORD:
+            # BM25 alone: Milvus tokenizes the raw query itself, so no embedding call.
+            results = self.client.search(
+                collection_name=self.collection_name,
+                data=[query],
+                anns_field=SPARSE_FIELD,
+                limit=k,
+                output_fields=output_fields,
+                consistency_level="Strong",
+            )
+        elif search_type == SearchType.HYBRID:
+            vector = self.embeddings.embed_query(query)
             candidates = max(k, HYBRID_CANDIDATES)
             results = self.client.hybrid_search(
                 collection_name=self.collection_name,
                 reqs=[
-                    AnnSearchRequest(data=[vector], anns_field="vector", param={}, limit=candidates),
+                    AnnSearchRequest(data=[vector], anns_field=VECTOR_FIELD, param={}, limit=candidates),
                     AnnSearchRequest(data=[query], anns_field=SPARSE_FIELD, param={}, limit=candidates),
                 ],
-                ranker=WeightedRanker(DENSE_WEIGHT, KEYWORD_WEIGHT),
+                ranker=WeightedRanker(SEMANTIC_WEIGHT, KEYWORD_WEIGHT),
                 limit=k,
                 output_fields=output_fields,
                 consistency_level="Strong",
             )
         else:
-            logger.warning(
-                "Collection %s has no BM25 field - dense-only search. Re-ingest with "
-                "`python -m scripts.ingest_static --recreate` to enable hybrid search.",
-                self.collection_name,
-            )
             results = self.client.search(
                 collection_name=self.collection_name,
-                data=[vector],
+                data=[self.embeddings.embed_query(query)],
+                anns_field=VECTOR_FIELD,
                 limit=k,
                 output_fields=output_fields,
                 consistency_level="Strong",
@@ -196,7 +227,7 @@ class MilvusRepository(AbstractVectorRepository):
 
             documents.append(
                 Document(
-                    page_content=entity["text"],
+                    page_content=entity[TEXT_FIELD],
                     metadata={
                         **entity.get("metadata", {}),
                         "vector_store_id": str(hit["id"]),

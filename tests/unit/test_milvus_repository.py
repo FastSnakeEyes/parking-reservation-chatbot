@@ -4,6 +4,7 @@ server or OpenAI calls."""
 
 import pytest
 from app.db.repositories.milvus import MilvusRepository
+from app.enums import SearchType
 from langchain_core.documents import Document
 from langchain_core.embeddings import DeterministicFakeEmbedding
 from pymilvus import MilvusClient
@@ -54,7 +55,7 @@ def test_create_collection_rejects_a_non_positive_dimension(repository):
 
 def test_hybrid_search_finds_an_exact_keyword(repository):
     """BM25 ranks the chunk with the keyword first. The fake embeddings carry no
-    meaning, so the dense side alone couldn't - only the keyword side can."""
+    meaning, so the semantic side alone couldn't - only the keyword side can."""
     texts = [
         "Opening hours are 07:00-22:00 on weekdays.",
         "Vehicles running on LPG are not allowed in the underground car park.",
@@ -69,7 +70,38 @@ def test_hybrid_search_finds_an_exact_keyword(repository):
     assert results[0].page_content == texts[1]
 
 
-def test_a_collection_without_bm25_falls_back_to_dense_search(tmp_path):
+class NoEmbeddings(DeterministicFakeEmbedding):
+    """Fails if a query is embedded - keyword search must not need it."""
+
+    def embed_query(self, text):
+        raise AssertionError("keyword search embedded the query")
+
+
+def test_keyword_search_uses_bm25_alone_without_embedding(repository):
+    texts = ["Opening hours are 07:00-22:00.", "Vehicles running on LPG are not allowed."]
+    repository.add_documents([_document(text, "rules.md", i) for i, text in enumerate(texts)])
+    repository.load_collection()
+    repository.embeddings = NoEmbeddings(size=DIMENSION)
+    repository.search_type = SearchType.KEYWORD
+
+    results = repository.search("Is LPG allowed?", k=1)
+
+    assert results[0].page_content == texts[1]
+
+
+def test_semantic_search_uses_vectors_alone(repository):
+    texts = ["Opening hours are 07:00-22:00.", "Vehicles running on LPG are not allowed."]
+    repository.add_documents([_document(text, "rules.md", i) for i, text in enumerate(texts)])
+    repository.load_collection()
+    repository.search_type = SearchType.SEMANTIC
+
+    # Deterministic fake embeddings: an identical text is its own nearest neighbour.
+    results = repository.search("Opening hours are 07:00-22:00.", k=1)
+
+    assert results[0].page_content == texts[0]
+
+
+def test_a_collection_without_bm25_falls_back_to_semantic_search(tmp_path):
     """A collection created before hybrid search keeps working until re-ingested."""
     client = MilvusClient(str(tmp_path / "old.db"))
     embeddings = DeterministicFakeEmbedding(size=DIMENSION)

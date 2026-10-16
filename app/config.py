@@ -11,7 +11,7 @@ from app.constants import (
     MIN_PRODUCTION_SECRET_DISTINCT_CHARS,
     MIN_PRODUCTION_SECRET_LENGTH,
 )
-from app.enums import AppEnvironment, LogLevel, TokenCounterKind
+from app.enums import AppEnvironment, LogLevel, SearchType, TokenCounterKind
 
 
 def selected_env_file() -> Path:
@@ -64,6 +64,8 @@ class Settings(BaseSettings):
     # 3, not 4: with hybrid search the 4th chunk added no recall on the golden set,
     # only noise and tokens (evals/report.md).
     retriever_k: int = Field(default=3, ge=1)
+    # hybrid (semantic + BM25) measured best on the golden set; semantic/keyword for comparison.
+    search_type: SearchType = SearchType.HYBRID
 
     cookie_name: str = "parking_chat"
     cookie_ttl: int = Field(default=1800, gt=0)

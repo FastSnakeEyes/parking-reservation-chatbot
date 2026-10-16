@@ -43,6 +43,7 @@ def create_vector_repository() -> MilvusRepository:
         embeddings=embeddings,
         collection_name=settings.milvus_collection,
         embedding_model=settings.embedding_model,
+        search_type=settings.search_type,
     )
 
 
