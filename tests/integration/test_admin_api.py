@@ -67,6 +67,23 @@ async def test_list_pending_requires_admin_key(db_session):
 
 @pytest.mark.integration
 @pytest.mark.asyncio
+async def test_an_empty_admin_key_setting_keeps_the_admin_api_closed(db_session, monkeypatch):
+    """ADMIN_API_KEY= left empty must not let a request without the header in."""
+    from app.config import settings
+    from pydantic import SecretStr
+
+    monkeypatch.setattr(settings, "admin_api_key", SecretStr(""))
+    app = build_test_app(db_session, StubGraph())
+
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
+        no_header = await client.get("/admin/reservations")
+        empty_header = await client.get("/admin/reservations", headers={"X-Admin-Key": ""})
+
+    assert no_header.status_code == empty_header.status_code == 503
+
+
+@pytest.mark.integration
+@pytest.mark.asyncio
 async def test_list_pending_returns_reservations_with_drafted_message(db_session, sample_parking):
     reservation_id = uuid4()
     await ReservationRepository(db_session).submit_pending(reservation_id, _booking(sample_parking.id), THREAD_ID)

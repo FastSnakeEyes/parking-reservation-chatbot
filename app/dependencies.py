@@ -115,6 +115,12 @@ async def require_admin(request: Request, x_admin_key: str = Header(default=""))
         )
 
     expected = settings.admin_api_key.get_secret_value()
+    # An empty ADMIN_API_KEY would match a request without the header: the admin
+    # API stays closed until a key is configured.
+    if not expected.strip():
+        logger.error("ADMIN_API_KEY is empty - the admin API refuses every request until it is set")
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Admin API key is not configured")
+
     if not secrets.compare_digest(x_admin_key.encode(), expected.encode()):
         if await redis_conn.incr(failures_key) == 1:
             await redis_conn.expire(failures_key, ADMIN_AUTH_WINDOW_SECONDS)

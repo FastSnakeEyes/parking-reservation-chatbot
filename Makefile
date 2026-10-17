@@ -4,8 +4,9 @@ TEST_SRC_DIRS = tests
 init_venv: install_uv
 	uv venv
 
+# Installs uv only when it's missing; `python3 -m pip` works where no bare `pip` is on PATH.
 install_uv:
-	pip install uv==0.9.2
+	@command -v uv >/dev/null 2>&1 || python3 -m pip install uv==0.9.2
 
 install: install_uv
 	uv sync

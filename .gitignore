@@ -16,6 +16,7 @@ env/
 ENV/
 
 # Environment variables / secrets
+.env
 .env.development
 .env.*
 !.env.example

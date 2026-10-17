@@ -133,27 +133,72 @@ the insert run under a row lock, so two customers can't both take the last space
    git clone git@github-personal:FastSnakeEyes/parking-reservation-chatbot.git
    ```
 
-2. Copy `.env.example` to `.env.development` and fill in real values (at minimum
-   `OPENAI_API_KEY`, and your own `ADMIN_API_KEY`/`MCP_API_KEY`; `PUBLIC_CONTACTS` must match the
-   support phone/email in `data/vilnius-parking-data/static/general_info.md`):
+2. **Install uv** (the package and Python manager this project uses), once per machine - any one of:
+
+   ```bash
+   curl -LsSf https://astral.sh/uv/install.sh | sh   # macOS / Linux
+   brew install uv                                    # macOS with Homebrew
+   python3 -m pip install uv==0.9.2                   # anywhere with Python
+   uv --version                                       # check: uv 0.9.x
+   ```
+
+3. **Create the Python virtualenv and install the dependencies.** The stack itself runs in Docker,
+   but tests, evaluations, the Streamlit admin UI and the scripts run on your machine:
+
+   ```bash
+   uv venv                # creates .venv with Python 3.13 (from .python-version; uv downloads it if needed)
+   uv sync                # installs the app and the dev tools (pytest, ruff) into .venv
+   uv sync --group eval   # optional: also Evidently and pandas, for `make eval-evidently`
+   ```
+
+   `uv venv` is needed once (`uv sync` alone also creates `.venv` if it's missing); run `uv sync`
+   again after pulling changes to `pyproject.toml`. `make install` does both in one step (it
+   installs uv first if it's missing). Activating the
+   virtualenv is optional - `uv run <command>` and the `make` targets use `.venv` automatically:
+
+   ```bash
+   source .venv/bin/activate   # optional; then plain `pytest`, `python -m ...` work
+   deactivate                  # to leave it
+   ```
+
+4. **Create `.env.development`** from the template:
 
    ```bash
    cp .env.example .env.development
    ```
 
-3. Start the stack:
+   The app reads `.env.development` by default, `.env.production` with `APP_ENV=production`, or
+   any file named by `ENV_FILE`. Those files are git-ignored; **`.env.example` is committed, so
+   never put a real key in it** - keep it as a template with empty or placeholder values.
+
+5. **Fill in the keys** in `.env.development`:
+
+   | Variable | Required | What to put | Without it |
+   | --- | --- | --- | --- |
+   | `OPENAI_API_KEY` | yes | your key from https://platform.openai.com/api-keys | chat, embeddings and ingestion fail |
+   | `ADMIN_API_KEY` | yes | a random value: `openssl rand -hex 32` | the admin console refuses every request (503) |
+   | `MCP_API_KEY` | yes | another random value - not the same as `ADMIN_API_KEY` | the MCP server doesn't start: approvals aren't recorded |
+   | `POSTGRES_PASSWORD` | yes | any password for the local database | Postgres doesn't start |
+   | `LANGSMITH_API_KEY` | no | your key from https://smith.langchain.com, with `LANGSMITH_TRACING=true` (and `LANGSMITH_ENDPOINT=https://eu.api.smith.langchain.com` for an EU account) | no tracing |
+   | `MILVUS_TOKEN` | no | only for a Milvus server with authentication (e.g. Zilliz Cloud) | - |
+
+   Everything else has working defaults for Docker. `PUBLIC_CONTACTS` must match the support
+   phone/email in `data/vilnius-parking-data/static/general_info.md`. In production
+   (`APP_ENV=production`) the API refuses to start with a short, default or shared admin/MCP key.
+
+6. Start the stack:
 
    ```bash
    docker compose --env-file .env.development up --build -d
    ```
 
-4. Run migrations:
+7. Run migrations:
 
    ```bash
    docker compose --env-file .env.development run --rm --no-deps api uv run --frozen --no-sync alembic upgrade head
    ```
 
-5. Ingest the static docs (Milvus) and dynamic data (Postgres):
+8. Ingest the static docs (Milvus) and dynamic data (Postgres):
 
    ```bash
    docker compose --env-file .env.development run --rm --no-deps api python -m scripts.ingest_static
@@ -163,6 +208,28 @@ the insert run under a row lock, so two customers can't both take the last space
    ```
 
 ## Usage
+
+### Links
+
+With the stack running locally on the default ports (`API_PORT=8000`, `MCP_SERVER_PUBLISHED_PORT=9000`):
+
+| What | Link |
+| --- | --- |
+| Chat UI | [http://localhost:8000/](http://localhost:8000/) |
+| Admin console (approve / reject reservations) | [http://localhost:8000/admin](http://localhost:8000/admin) - enter your `ADMIN_API_KEY` |
+| Admin console, Streamlit version (`make admin-ui`) | [http://localhost:8501/](http://localhost:8501/) |
+| API docs - try the chat and admin endpoints (Swagger UI) | [http://localhost:8000/docs](http://localhost:8000/docs) |
+| API docs (ReDoc) | [http://localhost:8000/redoc](http://localhost:8000/redoc) |
+| Chat API | `POST` [http://localhost:8000/chat](http://localhost:8000/chat), `GET` [http://localhost:8000/chat/updates](http://localhost:8000/chat/updates) |
+| Admin API (`X-Admin-Key` header) | `GET` [http://localhost:8000/admin/reservations](http://localhost:8000/admin/reservations), `POST` `http://localhost:8000/admin/reservations/{id}/decision` |
+| API health | [http://localhost:8000/health](http://localhost:8000/health) |
+| MCP server health | [http://localhost:9000/health](http://localhost:9000/health) |
+| LangSmith traces (if enabled) | [https://smith.langchain.com](https://smith.langchain.com) (EU: [https://eu.smith.langchain.com](https://eu.smith.langchain.com)) |
+
+The chat API needs the session cookie that `GET /` sets, so open the Chat UI first (or call `/`
+in the same client). Request and response formats: [HTTP API](#http-api).
+
+### How to use
 
 - **Chat UI**: open `http://localhost:${API_PORT}/` (default `8000`). After code changes,
   rebuild the API container: `docker compose --env-file .env.development up -d --build api`
