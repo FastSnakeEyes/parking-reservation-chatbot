@@ -13,23 +13,23 @@ Golden set: 30 questions; retrieval is scored on the 23 with a relevant doc, K=3
 
 | K | Precision@K | Recall@K | MRR@K | Precision@1 | Mean latency (ms) |
 | --- | --- | --- | --- | --- | --- |
-| 2 | 0.74 | 0.89 | 0.89 | 0.87 | 609.0 |
-| 3 (current) | 0.62 | 0.96 | 0.91 | 0.87 | 599.8 |
-| 4 (recommended) | 0.57 | 1.00 | 0.92 | 0.87 | 608.6 |
-| 5 | 0.56 | 1.00 | 0.92 | 0.87 | 582.5 |
+| 2 | 0.74 | 0.89 | 0.89 | 0.87 | 599.9 |
+| 3 (current) | 0.62 | 0.96 | 0.91 | 0.87 | 591.4 |
+| 4 (recommended) | 0.57 | 1.00 | 0.92 | 0.87 | 599.9 |
+| 5 | 0.56 | 1.00 | 0.92 | 0.87 | 582.6 |
 
 Recommended K=4: the smallest K with the best recall. A larger K only adds chunks the model has to read past (Precision@K falls), and a smaller one misses answers. RETRIEVER_K is 3 - set it to 4.
 
 ## Retrieval latency
 
-- Mean: 646.9 ms
-- p95: 1638.2 ms
+- Mean: 651.3 ms
+- p95: 1758.6 ms
 
 ## End-to-end /chat latency
 
 - Samples: 5
-- Mean: 3238.0 ms
-- p95: 4726.2 ms
+- Mean: 2547.2 ms
+- p95: 4693.8 ms
 
 ## Method
 
@@ -48,35 +48,35 @@ Recommended K=4: the smallest K with the best recall. A larger K only adds chunk
 
 | Question | Category | Precision | Recall | Latency (ms) | Retrieved sources |
 | --- | --- | --- | --- | --- | --- |
-| What payment methods are accepted at VilniusPark car parks? | single_fact | 0.67 | 1.00 | 1895.4 | general_info.md, general_info.md, parkings/station.md |
-| Can I park a motorcycle at a VilniusPark car park? | single_fact | 1.00 | 1.00 | 587.3 | general_info.md, general_info.md, general_info.md |
-| Do disability parking card holders get free parking? | single_fact | 0.33 | 1.00 | 604.9 | parkings/uzupis.md, parkings/old_town.md, general_info.md |
-| What are the steps to reserve a parking space? | single_fact | 1.00 | 1.00 | 589.5 | booking_process.md, booking_process.md, booking_process.md |
-| What is the minimum and maximum length of a reservation? | single_fact | 0.67 | 1.00 | 605.3 | booking_process.md, parkings/airport.md, booking_process.md |
-| Can I cancel my parking reservation for free? | single_fact | 0.67 | 1.00 | 598.1 | booking_process.md, booking_process.md, general_info.md |
-| Why might a parking reservation be rejected? | single_fact | 1.00 | 1.00 | 602.4 | booking_process.md, booking_process.md, booking_process.md |
-| What is the maximum driving speed inside the car parks? | single_fact | 0.33 | 1.00 | 592.6 | rules.md, general_info.md, booking_process.md |
-| What happens if I lose my entry ticket? | single_fact | 0.33 | 1.00 | 605.3 | rules.md, general_info.md, booking_process.md |
-| Are LPG vehicles allowed in the Old Town car park? | single_fact | 0.67 | 1.00 | 598.3 | rules.md, parkings/old_town.md, general_info.md |
-| What is the height limit at the Old Town car park? | single_fact | 0.67 | 1.00 | 603.2 | rules.md, parkings/old_town.md, parkings/old_town.md |
-| How many EV charging bays does the Old Town car park have? | single_fact | 0.33 | 1.00 | 601.0 | parkings/old_town.md, rules.md, parkings/business_center.md |
-| What facilities does the Business Center car park have? | single_fact | 0.67 | 1.00 | 591.6 | parkings/business_center.md, parkings/business_center.md, general_info.md |
-| Where is the Užupis car park located and how big is it? | single_fact | 0.67 | 1.00 | 604.2 | parkings/uzupis.md, general_info.md, parkings/uzupis.md |
-| Is there a shuttle between the Airport car park and the terminal? | single_fact | 0.67 | 1.00 | 609.6 | parkings/airport.md, parkings/airport.md, general_info.md |
-| my car is 2.15 m tall, will it fit in the old town garage? | paraphrase | 0.67 | 1.00 | 587.3 | parkings/old_town.md, parkings/old_town.md, parkings/business_center.md |
-| I'm flying out for 3 weeks - where can I leave the car, and can I book it for that long? | paraphrase | 1.00 | 1.00 | 604.1 | booking_process.md, booking_process.md, parkings/airport.md |
-| can I pay in cash at the Užupis lot? | paraphrase | 0.00 | 0.00 | 601.1 | general_info.md, general_info.md, general_info.md |
-| which of your parkings let me charge an electric car? | paraphrase | 0.33 | 1.00 | 596.5 | general_info.md, booking_process.md, rules.md |
-| I need to catch a 5am train, is the station parking open that early? | paraphrase | 0.67 | 1.00 | 402.6 | parkings/station.md, parkings/station.md, general_info.md |
-| What is the penalty for blocking an EV charger, and how many charging bays does the Airport car park have? | multi_fact | 0.67 | 1.00 | 596.9 | rules.md, parkings/airport.md, parkings/business_center.md |
-| I have a disability parking card - can I park for free at Užupis, and how many accessible spaces does it have? | multi_fact | 0.33 | 1.00 | 598.7 | parkings/uzupis.md, general_info.md, parkings/old_town.md |
-| If I cancel one hour before my reservation starts, what do I pay, and how long is my space held if I arrive late? | multi_fact | 1.00 | 1.00 | 602.1 | booking_process.md, booking_process.md, booking_process.md |
+| What payment methods are accepted at VilniusPark car parks? | single_fact | 0.67 | 1.00 | 1997.7 | general_info.md, general_info.md, parkings/station.md |
+| Can I park a motorcycle at a VilniusPark car park? | single_fact | 1.00 | 1.00 | 582.1 | general_info.md, general_info.md, general_info.md |
+| Do disability parking card holders get free parking? | single_fact | 0.33 | 1.00 | 802.1 | parkings/uzupis.md, parkings/old_town.md, general_info.md |
+| What are the steps to reserve a parking space? | single_fact | 1.00 | 1.00 | 596.3 | booking_process.md, booking_process.md, booking_process.md |
+| What is the minimum and maximum length of a reservation? | single_fact | 0.67 | 1.00 | 605.1 | booking_process.md, parkings/airport.md, booking_process.md |
+| Can I cancel my parking reservation for free? | single_fact | 0.67 | 1.00 | 602.1 | booking_process.md, booking_process.md, general_info.md |
+| Why might a parking reservation be rejected? | single_fact | 1.00 | 1.00 | 592.2 | booking_process.md, booking_process.md, booking_process.md |
+| What is the maximum driving speed inside the car parks? | single_fact | 0.33 | 1.00 | 604.1 | rules.md, general_info.md, booking_process.md |
+| What happens if I lose my entry ticket? | single_fact | 0.33 | 1.00 | 608.1 | rules.md, general_info.md, booking_process.md |
+| Are LPG vehicles allowed in the Old Town car park? | single_fact | 0.67 | 1.00 | 592.6 | rules.md, parkings/old_town.md, general_info.md |
+| What is the height limit at the Old Town car park? | single_fact | 0.67 | 1.00 | 595.7 | rules.md, parkings/old_town.md, parkings/old_town.md |
+| How many EV charging bays does the Old Town car park have? | single_fact | 0.33 | 1.00 | 599.7 | parkings/old_town.md, rules.md, parkings/business_center.md |
+| What facilities does the Business Center car park have? | single_fact | 0.67 | 1.00 | 606.7 | parkings/business_center.md, parkings/business_center.md, general_info.md |
+| Where is the Užupis car park located and how big is it? | single_fact | 0.67 | 1.00 | 600.3 | parkings/uzupis.md, general_info.md, parkings/uzupis.md |
+| Is there a shuttle between the Airport car park and the terminal? | single_fact | 0.67 | 1.00 | 601.7 | parkings/airport.md, parkings/airport.md, general_info.md |
+| my car is 2.15 m tall, will it fit in the old town garage? | paraphrase | 0.67 | 1.00 | 595.3 | parkings/old_town.md, parkings/old_town.md, parkings/business_center.md |
+| I'm flying out for 3 weeks - where can I leave the car, and can I book it for that long? | paraphrase | 1.00 | 1.00 | 600.9 | booking_process.md, booking_process.md, parkings/airport.md |
+| can I pay in cash at the Užupis lot? | paraphrase | 0.00 | 0.00 | 597.7 | general_info.md, general_info.md, general_info.md |
+| which of your parkings let me charge an electric car? | paraphrase | 0.33 | 1.00 | 399.3 | general_info.md, booking_process.md, rules.md |
+| I need to catch a 5am train, is the station parking open that early? | paraphrase | 0.67 | 1.00 | 603.6 | parkings/station.md, parkings/station.md, general_info.md |
+| What is the penalty for blocking an EV charger, and how many charging bays does the Airport car park have? | multi_fact | 0.67 | 1.00 | 593.0 | rules.md, parkings/airport.md, parkings/business_center.md |
+| I have a disability parking card - can I park for free at Užupis, and how many accessible spaces does it have? | multi_fact | 0.33 | 1.00 | 407.9 | parkings/uzupis.md, general_info.md, parkings/old_town.md |
+| If I cancel one hour before my reservation starts, what do I pay, and how long is my space held if I arrive late? | multi_fact | 1.00 | 1.00 | 595.2 | booking_process.md, booking_process.md, booking_process.md |
 
 ## Evidently AI: LLM-as-judge answer quality
 
 30 golden questions, real chatbot answers, judged by `gpt-4o-mini` with Evidently descriptors - full interactive report: [`evidently_report.html`](evidently_report.html).
 
-**Overall: 67%** of questions pass every check that applies to them.
+**Overall: 77%** of questions pass every check that applies to them.
 
 | Check | Passing | Pass means |
 | --- | --- | --- |
@@ -84,17 +84,17 @@ Recommended K=4: the smallest K with the best recall. A larger K only adds chunk
 | Faithfulness | 83% | the answer is grounded in the retrieved context |
 | Completeness | 87% | the answer gives every fact and condition the question asks for |
 | PII in answer | 100% | no actual personal data (a name, plate, personal contact) in the answer |
-| Answered or declined correctly | 90% | answers what it can; declines out-of-scope, private-data, injection and not-in-docs questions |
+| Answered or declined correctly | 97% | answers what it can; declines out-of-scope, private-data, injection and not-in-docs questions |
 
 Context quality, faithfulness and completeness are scored on the questions to answer only.
 
 | Question category | Questions | Passing every check |
 | --- | --- | --- |
-| single_fact | 15 | 93% |
+| single_fact | 15 | 100% |
 | paraphrase | 5 | 20% |
 | multi_fact | 3 | 33% |
-| not_in_docs | 2 | 0% |
-| out_of_scope | 2 | 50% |
+| not_in_docs | 2 | 50% |
+| out_of_scope | 2 | 100% |
 | private_data | 2 | 100% |
 | injection | 1 | 100% |
 

@@ -1,7 +1,7 @@
 """Agent middleware not tied to a guardrail (those live in app/ai/guardrails.py)."""
 
 from collections.abc import Awaitable, Callable
-from datetime import datetime
+from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from langchain.agents import AgentState
@@ -13,12 +13,22 @@ from app.ai.tools import request_admin_approval
 from app.config import settings
 
 
+def current_time_text(now: datetime) -> str:
+    """Today's local date/time, and the coming week spelled out: models get
+    weekday arithmetic wrong ("Wednesday" resolved to a Monday), so they look
+    the date up instead of computing it."""
+    week = ", ".join((now + timedelta(days=offset)).strftime("%A %Y-%m-%d") for offset in range(1, 8))
+    return (
+        f"Current local date/time: {now.strftime(f'%A %Y-%m-%d %H:%M ({settings.timezone})')}.\n"
+        f"The next 7 days: {week}."
+    )
+
+
 @dynamic_prompt
 def current_time_prompt(_request: ModelRequest) -> str:
     """The user agent's system prompt, stamped with the current local date/time
     on every model call so relative dates ("tomorrow", "Friday") resolve correctly."""
-    now = datetime.now(ZoneInfo(settings.timezone)).strftime(f"%A %Y-%m-%d %H:%M ({settings.timezone})")
-    return f"{SYSTEM_PROMPT}\n\nCurrent local date/time: {now}."
+    return f"{SYSTEM_PROMPT}\n\n{current_time_text(datetime.now(ZoneInfo(settings.timezone)))}"
 
 
 @before_model(can_jump_to=["end"])

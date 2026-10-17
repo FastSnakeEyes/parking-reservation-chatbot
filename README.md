@@ -285,11 +285,11 @@ in the same client). Request and response formats: [HTTP API](#http-api).
   run found a real bug: the chatbot added the brand name to search queries, which pulled in every
   doc's generic intro chunk instead of the relevant one - 6 of 15 answers wrongly said the docs
   didn't cover the question. Search queries now drop the brand name. Latest run, on all 30
-  questions: 67% pass every check (single-fact 93%, paraphrases 20%, multi-fact 33%, private
-  data and injection 100%), no personal data in any answer. Reviewing each failure: 2 are real
-  bugs (the Airport's EV bay count answered with Business Center's; Užupis's 2 accessible spaces
-  missed) and 7 are judge errors - the Decline judge doesn't count "the docs don't mention valet
-  parking" as declining, and the judges see only the eval's top-3 chunks, not the ones the
+  questions: 77% pass every check (single-fact 100%, paraphrases 20%, multi-fact 33%, out of scope,
+  private data and injection 100%), no personal data in any answer. Reviewing each failure: 2 are
+  real bugs (the Airport's EV bay count, where the database and the docs disagree; Užupis's 2
+  accessible spaces missed) and 5 are judge errors - e.g. "the docs don't mention a monthly pass"
+  isn't counted as declining, and the judges see only the eval's top-3 chunks, not the ones the
   chatbot actually searched. Completeness and PII
   use custom judges: Evidently's built-in Completeness wants an answer to repeat every retrieved
   chunk (it failed "10 km/h" for not listing EV charger penalties; 7%), and its PII judge flagged
@@ -332,7 +332,7 @@ uv run pytest --cov=app --cov=mcp_server --cov-report=term-missing   # with cove
 | `tests/e2e/` | the whole reservation flow through the real graph, Postgres checkpointer and MCP server |
 
 CI (`.github/workflows/ci.yml`) runs Ruff and the full suite on every push and pull request.
-Latest local run: 166 tests passing, 88% coverage of `app/` and `mcp_server/`.
+Latest local run: 168 tests passing, 88% coverage of `app/` and `mcp_server/`.
 
 ## Checking approved reservations
 
